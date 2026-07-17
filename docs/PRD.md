@@ -29,10 +29,10 @@ all update paths · keep the 512 MB RAM budget sacred · no cloud lock-in.
 |---|---|
 | Compute | Raspberry Pi Zero 2 W (quad Cortex-A53 @ 1 GHz, **512 MB RAM**) |
 | Display | Scrap laptop LCD + generic HDMI TV driver board, over HDMI |
-| Native resolution | **⚠️ TBD — measure the panel/board's native mode** |
+| Native resolution | **⚠️ TBD — pending laptop model; detect via EDID at runtime + manual override in web UI** |
 | Input media | microSD (boot + data), USB pendrive via micro-USB OTG adapter |
 | Network | 2.4 GHz WiFi (onboard), BT unused for now |
-| Internet available? | **⚠️ TBD — affects OTA polling & cloud sync** |
+| Internet available? | **Usually, not guaranteed → offline-first; opportunistic OTA/sync, USB is the guaranteed update path** |
 | Sensors (optional) | PIR motion, ambient light — **⚠️ not present unless added** |
 | Screen power control | Display blanking / DPMS (HDMI-CEC unlikely via generic board) |
 
@@ -147,7 +147,9 @@ base image: bootloader(tryboot/bootcount) · RAUC · read-only rootfs · systemd
   night window.
 - **USB offline:** pendrive containing `*.raucb` → agent verifies signature → installs.
 - **Auto-update policy:** configurable (auto / notify-only / manual); default auto within the
-  night window; never mid-slideshow without the window unless user forces.
+  night window; never mid-slideshow without the window unless user forces. Since internet is
+  **not guaranteed**, OTA is **opportunistic** (checks whenever online); **USB offline update is
+  the guaranteed delivery path** and must always work with zero network.
 - **Safety:** signature required; free-space & power checks before install; atomic swap;
   rollback on failed health check.
 
@@ -166,8 +168,9 @@ base image: bootloader(tryboot/bootcount) · RAUC · read-only rootfs · systemd
 
 ### 7.5 Content pipeline
 - Import sources normalized into `/data/photos`; index in **SQLite**.
-- Steps: detect new → validate/decode (JPEG/PNG/HEIC?⚠️/WebP) → fix EXIF orientation →
-  generate thumbnail → dedupe (hash) → add to index. Prune on delete.
+- Steps: detect new → validate/decode (**JPEG, PNG, HEIC, WebP** — HEIC via a libheif/pillow-heif
+  dependency for iPhone photos) → fix EXIF orientation → generate thumbnail → dedupe (hash) →
+  add to index. Prune on delete. Large images pre-scaled to panel resolution on import to save RAM.
 - Memory-aware: never hold more than N decoded frames; pre-scale large images to panel size.
 
 ### 7.6 Web admin UI
@@ -221,9 +224,11 @@ base image: bootloader(tryboot/bootcount) · RAUC · read-only rootfs · systemd
 ---
 
 ## 11. Open questions / assumptions ⚠️
-1. **Panel native resolution & HDMI timing** — need to measure (biggest display unknown).
-2. **Is internet available where the frame lives?** Governs OTA polling & cloud sync design.
-3. **Image formats to support** — JPEG/PNG guaranteed; HEIC (iPhone) adds a decode dependency.
+1. **Panel native resolution & HDMI timing** — ⚠️ still open, pending laptop model. Renderer
+   detects the mode at runtime with a manual override, so build is not blocked.
+2. ~~Is internet available?~~ **Resolved:** usually-but-not-guaranteed → offline-first;
+   opportunistic OTA/sync; USB is the guaranteed update path.
+3. ~~Image formats?~~ **Resolved:** JPEG, PNG, HEIC, WebP (HEIC via libheif/pillow-heif).
 4. **Where will OTA bundles be hosted?** (self-hosted static HTTPS vs a service.)
 5. **Any sensors** (PIR/light) to design for, or software-only v1?
 6. **Single frame or a fleet** eventually? (affects telemetry/dashboard investment.)
