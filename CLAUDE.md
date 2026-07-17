@@ -1,6 +1,13 @@
-# Firmware-trial
+# Firmware-trial — Lumen Frame
 
-Embedded firmware project. Tech stack / target hardware: **TBD — fill in once decided.**
+Digital photo frame **appliance firmware** for a **Raspberry Pi Zero 2 W** (512 MB RAM)
+driving a repurposed laptop LCD over HDMI (via a generic TV driver board).
+
+Stack: Raspberry Pi OS Lite 64-bit (read-only rootfs, A/B + data partition) · **RAUC** OTA ·
+**Go** `frame-agent` (updates/health/rollback) · **Python + pi3d** renderer ·
+**Python FastAPI** services (web admin, content manager, SoftAP onboarding).
+
+Full spec: [docs/PRD.md](docs/PRD.md).
 
 > This file is the project's "master prompt." Claude Code loads it automatically at the
 > start of every session, so anything written here does not need to be repeated in chat.
@@ -40,6 +47,7 @@ _Fill these in once the build system exists. Examples:_
 These files carry the project's intent and history — read the relevant one before
 working in that area, and keep them updated as part of the work:
 
+- [docs/PRD.md](docs/PRD.md) — full product & engineering spec (the master "detailed prompt").
 - [docs/GOALS.md](docs/GOALS.md) — mission, success criteria, non-goals, constraints.
 - [docs/ROADMAP.md](docs/ROADMAP.md) — milestones and their target outcomes.
 - [docs/DECISIONS.md](docs/DECISIONS.md) — architecture decisions (ADRs) and rationale.

@@ -7,6 +7,8 @@ _Format loosely follows [Keep a Changelog](https://keepachangelog.com/)._
 ### Added
 - Project scaffolding: CLAUDE.md, guardrails, goals/roadmap/decisions/outcomes docs,
   test plan, retrospective & learnings logs.
+- Product & engineering spec (docs/PRD.md) for the Lumen Frame digital photo frame.
+- Filled in Goals, Roadmap, and Decisions (ADR-001..003) from the planning session.
 
 ### Changed
 - _..._

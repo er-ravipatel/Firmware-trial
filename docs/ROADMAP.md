@@ -1,23 +1,37 @@
 # Roadmap
 
-_Milestones toward the goals in [GOALS.md](GOALS.md). Each milestone names a target outcome._
+_Milestones toward [GOALS.md](GOALS.md). Full detail in [PRD.md](PRD.md)._
 
-## Milestone 1 — Bring-up
-**Target outcome:** _e.g. toolchain builds, board flashes, LED blinks._
-- [ ] Set up toolchain & build system
-- [ ] First successful flash to hardware
-- [ ] Basic "hello world" (blink / UART print)
+## Milestone 0 — De-risk spikes (do first)
+**Target outcome:** the two scariest unknowns are proven on real hardware.
+- [ ] **Spike R1:** pi3d fullscreen image on the actual screen (64-bit Pi OS DRM/GBM).
+- [ ] **Spike R2:** RAUC A/B rollback on a scratch SD (bootcount reverts a bad slot).
+- [ ] Measure & pin the panel's native HDMI resolution/timing.
 
-## Milestone 2 — Core function
-**Target outcome:** _the main feature works end-to-end._
-- [ ] Feature A
-- [ ] Feature B
+## Milestone 1 — MVP: on the wall
+**Target outcome:** boots to a slideshow from local photos; basic import & offline update.
+- [ ] Base image: read-only rootfs, A/B + data partition, systemd, splash.
+- [ ] frame-ui: fullscreen slideshow, EXIF rotate, cross-fade, HDMI pinned, no blanking.
+- [ ] USB pendrive auto-import to data partition.
+- [ ] SoftAP onboarding to join home WiFi.
+- [ ] USB offline firmware update (signed RAUC bundle).
+- [ ] Watchdog recovers a hung renderer.
 
-## Milestone 3 — Hardening
-**Target outcome:** _reliable, tested, documented._
-- [ ] Test coverage per [../TESTPLAN.md](../TESTPLAN.md)
-- [ ] Error handling & watchdog
-- [ ] Documentation complete
+## Milestone 2 — Product feel
+**Target outcome:** looks and updates like a real product.
+- [ ] Ken Burns pan/zoom + configurable transitions.
+- [ ] Web admin UI (manage photos, transitions, schedule, status).
+- [ ] Night sleep/wake schedule (display blank).
+- [ ] OTA auto-update over WiFi with rollback + stable/beta channels.
+- [ ] Clock/weather overlay; albums/playlists/shuffle/favorites.
+
+## Milestone 3 — Delight layer
+**Target outcome:** the features that make people say "wow."
+- [ ] Web upload (drag-and-drop from phone).
+- [ ] WiFi sync (Immich / SMB / Nextcloud).
+- [ ] Face-aware smart crop; short video clips.
+- [ ] Optional PIR wake / ambient-light brightness.
 
 ## Backlog / ideas
-- _Unscheduled things worth remembering._
+- Fleet dashboard for multiple frames.
+- Email-to-frame; multi-frame sync.
