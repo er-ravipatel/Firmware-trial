@@ -28,8 +28,8 @@ all update paths · keep the 512 MB RAM budget sacred · no cloud lock-in.
 | Item | Value |
 |---|---|
 | Compute | Raspberry Pi Zero 2 W (quad Cortex-A53 @ 1 GHz, **512 MB RAM**) |
-| Display | Scrap laptop LCD + generic HDMI TV driver board, over HDMI |
-| Native resolution | **⚠️ TBD — pending laptop model; detect via EDID at runtime + manual override in web UI** |
+| Display | Scrap laptop LCD (**Acer Aspire 4347, 14"**) + generic HDMI TV driver board, over HDMI |
+| Native resolution | **1366×768 (WXGA HD, 16:9)** — working spec; confirm via panel sticker/EDID. Renderer also detects at runtime + manual override in web UI |
 | Input media | microSD (boot + data), USB pendrive via micro-USB OTG adapter |
 | Network | 2.4 GHz WiFi (onboard), BT unused for now |
 | Internet available? | **Usually, not guaranteed → offline-first; opportunistic OTA/sync, USB is the guaranteed update path** |
@@ -224,8 +224,8 @@ base image: bootloader(tryboot/bootcount) · RAUC · read-only rootfs · systemd
 ---
 
 ## 11. Open questions / assumptions ⚠️
-1. **Panel native resolution & HDMI timing** — ⚠️ still open, pending laptop model. Renderer
-   detects the mode at runtime with a manual override, so build is not blocked.
+1. ~~Panel native resolution?~~ **Resolved:** Acer Aspire 4347 (14") → **1366×768** working spec;
+   confirm via panel sticker/EDID. Pre-scale imported images to 1366×768; pin HDMI timing to match.
 2. ~~Is internet available?~~ **Resolved:** usually-but-not-guaranteed → offline-first;
    opportunistic OTA/sync; USB is the guaranteed update path.
 3. ~~Image formats?~~ **Resolved:** JPEG, PNG, HEIC, WebP (HEIC via libheif/pillow-heif).
