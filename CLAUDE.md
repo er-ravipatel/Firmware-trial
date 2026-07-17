@@ -35,6 +35,23 @@ _Fill these in once the build system exists. Examples:_
 - Don't commit build artifacts or secrets — keep them out via `.gitignore`.
 - When unsure about hardware behavior, ask rather than guessing.
 
+## Project docs
+
+These files carry the project's intent and history — read the relevant one before
+working in that area, and keep them updated as part of the work:
+
+- [docs/GOALS.md](docs/GOALS.md) — mission, success criteria, non-goals, constraints.
+- [docs/ROADMAP.md](docs/ROADMAP.md) — milestones and their target outcomes.
+- [docs/DECISIONS.md](docs/DECISIONS.md) — architecture decisions (ADRs) and rationale.
+- [docs/OUTCOMES.md](docs/OUTCOMES.md) — expected vs. actual results per milestone.
+- [TESTPLAN.md](TESTPLAN.md) — what to test, how, and pass/fail criteria.
+- [docs/RETROSPECTIVE.md](docs/RETROSPECTIVE.md) — reflections after each milestone.
+- [docs/LEARNINGS.md](docs/LEARNINGS.md) — reusable lessons; promote durable ones into this file.
+- [CHANGELOG.md](CHANGELOG.md) — notable changes over time.
+
+**The refinement loop:** goals → build → test → outcomes → retrospective → learnings →
+promote durable lessons back into this file (CLAUDE.md) and GOALS.md.
+
 ## Notes for Claude
 
 - If a command or convention above is still a placeholder, ask me before assuming one.
