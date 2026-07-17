@@ -1,37 +1,38 @@
 # Roadmap
 
 _Milestones toward [GOALS.md](GOALS.md). Full detail in [PRD.md](PRD.md)._
+_Architecture: bare-metal C++ firmware on Circle (no Linux)._
 
-## Milestone 0 — De-risk spikes (do first)
-**Target outcome:** the two scariest unknowns are proven on real hardware.
-- [ ] **Spike R1:** pi3d fullscreen image on the actual screen (64-bit Pi OS DRM/GBM).
-- [ ] **Spike R2:** RAUC A/B rollback on a scratch SD (bootcount reverts a bad slot).
-- [ ] Measure & pin the panel's native HDMI resolution/timing.
+## Milestone 0 — Environment & de-risk spikes (do first)
+**Target outcome:** the toolchain works and the scariest bare-metal unknowns are proven.
+- [ ] Set up **WSL2** + `aarch64-none-elf` toolchain; build a stock Circle sample to SD.
+- [ ] **Spike C1:** Circle boots on the Zero 2 W; HDMI framebuffer shows a test image on the
+      Acer panel through the TV board (pin 1366×768 timing).
+- [ ] **Spike C2:** read a JPEG from SD (FatFs) + ported libjpeg → display it.
+- [ ] **Spike C5:** A/B kernel swap via Pi `tryboot` + auto-rollback on a scratch SD.
 
-## Milestone 1 — MVP: on the wall
-**Target outcome:** boots to a slideshow from local photos; basic import & offline update.
-- [ ] Base image: read-only rootfs, A/B + data partition, systemd, splash.
-- [ ] frame-ui: fullscreen slideshow, EXIF rotate, cross-fade, HDMI pinned, no blanking.
-- [ ] USB pendrive auto-import to data partition.
-- [ ] SoftAP onboarding to join home WiFi.
-- [ ] USB offline firmware update (signed RAUC bundle).
-- [ ] Watchdog recovers a hung renderer.
+## Milestone 1 — MVP: genuine firmware on the wall
+**Target outcome:** boots our OS to a slideshow from local photos; USB import; offline update.
+- [ ] Image layout: boot + A/B kernel slots + FAT data area.
+- [ ] Render engine: fullscreen slideshow, EXIF rotate, cross-fade (NEON).
+- [ ] USB pendrive auto-import (Circle USB MSD) → FAT data area.
+- [ ] `wifi.conf` onboarding; WLAN station joins WiFi (Spike C4 — also test SoftAP feasibility).
+- [ ] USB offline signed firmware update with A/B + rollback.
+- [ ] Watchdog recovers a hung render loop.
 
 ## Milestone 2 — Product feel
 **Target outcome:** looks and updates like a real product.
-- [ ] Ken Burns pan/zoom + configurable transitions.
-- [ ] Web admin UI (manage photos, transitions, schedule, status).
-- [ ] Night sleep/wake schedule (display blank).
-- [ ] OTA auto-update over WiFi with rollback + stable/beta channels.
-- [ ] Clock/weather overlay; albums/playlists/shuffle/favorites.
+- [ ] Ken Burns (NEON scaler) + configurable transitions (Spike C6 perf).
+- [ ] Web admin UI (Circle HTTP): manage photos/settings/schedule/status.
+- [ ] **HEIC upload transcode** (browser-side) + companion PC converter.
+- [ ] Night sleep/wake (framebuffer blank).
+- [ ] OTA auto-update over WiFi (opportunistic) + rollback + channels.
+- [ ] Clock overlay (FreeType); PNG/WebP; albums/shuffle/favorites.
 
 ## Milestone 3 — Delight layer
-**Target outcome:** the features that make people say "wow."
-- [ ] Web upload (drag-and-drop from phone).
-- [ ] WiFi sync (Immich / SMB / Nextcloud).
-- [ ] Face-aware smart crop; short video clips.
+- [ ] Weather overlay (needs mbedTLS/TLS port).
+- [ ] WiFi sync (Immich/SMB); short MJPEG clips.
 - [ ] Optional PIR wake / ambient-light brightness.
 
 ## Backlog / ideas
-- Fleet dashboard for multiple frames.
-- Email-to-frame; multi-frame sync.
+- SQLite port for the index; fleet update dashboard; multi-frame sync.

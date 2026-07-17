@@ -3,9 +3,13 @@
 Digital photo frame **appliance firmware** for a **Raspberry Pi Zero 2 W** (512 MB RAM)
 driving a repurposed laptop LCD over HDMI (via a generic TV driver board).
 
-Stack: Raspberry Pi OS Lite 64-bit (read-only rootfs, A/B + data partition) · **RAUC** OTA ·
-**Go** `frame-agent` (updates/health/rollback) · **Python + pi3d** renderer ·
-**Python FastAPI** services (web admin, content manager, SoftAP onboarding).
+**Architecture: a genuine bare-metal firmware OS in C++ on the [Circle](https://github.com/rsta2/circle)
+framework — no Linux.** The Pi boots our `kernel8.img` directly.
+
+Stack: Circle (`RASPPI=3`, AArch64) + circle-stdlib · **C++** app layer (render engine, content
+pipeline, web-admin, update agent) · Circle drivers (framebuffer, SD/FatFs, USB-MSD, WLAN+lwIP) ·
+custom A/B OTA via Pi `tryboot` · HEIC via boundary transcode (browser/PC). Build via **WSL2** +
+`aarch64-none-elf`. Software (NEON) rendering — no GPU/GLES bare-metal.
 
 Full spec: [docs/PRD.md](docs/PRD.md).
 

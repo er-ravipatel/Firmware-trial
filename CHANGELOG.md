@@ -11,7 +11,9 @@ _Format loosely follows [Keep a Changelog](https://keepachangelog.com/)._
 - Filled in Goals, Roadmap, and Decisions (ADR-001..003) from the planning session.
 
 ### Changed
-- _..._
+- **Major pivot:** re-architected from a Linux appliance to a **genuine bare-metal firmware OS
+  in C++ on Circle** (no Linux). Rewrote PRD, roadmap, and goals; superseded ADR-001..003 with
+  ADR-004..007 (Circle bare-metal, C++ software renderer, HEIC boundary transcode).
 
 ### Fixed
 - _..._

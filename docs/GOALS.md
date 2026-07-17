@@ -21,7 +21,11 @@ effortless setup, effortless content, self-maintaining via OTA.
 - A hosted cloud service we operate (self-host / offline-first instead).
 
 ## Constraints
-- Target hardware: Raspberry Pi Zero 2 W (quad A53, **512 MB RAM**), HDMI out, 2.4 GHz WiFi.
-- Display: scrap laptop LCD + generic HDMI TV driver board; native resolution **TBD**.
-- Offline-first: core features must work with no internet.
+- **Bare-metal firmware OS** in C++ on the Circle framework — **no Linux**. The Pi boots our
+  `kernel8.img` directly. Authenticity ("a genuine firmware OS") is a first-class goal.
+- Target hardware: Raspberry Pi Zero 2 W (BCM2837, quad A53, **512 MB RAM**), HDMI, 2.4 GHz WiFi.
+- Display: Acer Aspire 4347 (14") LCD + generic HDMI TV board; **1366×768** (confirm).
+- Offline-first: core features must work with no internet; **USB is the guaranteed update path**.
+- HEIC handled by **boundary transcode** (browser/PC/network), not on-device.
 - No cloud lock-in; one signed artifact for all update paths.
+- Accepted trade-off: a **months-long build** in exchange for genuine bare-metal firmware.
