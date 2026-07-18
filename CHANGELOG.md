@@ -5,6 +5,8 @@ _Format loosely follows [Keep a Changelog](https://keepachangelog.com/)._
 
 ## [Unreleased]
 ### Added
+- Behavioral scenario catalog (docs/SCENARIOS.md): 50+ Given/When/Then scenarios for the deployed
+  product (online/offline, power loss, updates, network, faults, security, recovery) → feeds tests.
 - Deep subsystem design (docs/DESIGN.md): boot/image layout, content pipeline, render engine,
   and OTA/A-B update — with Circle APIs, ported libs, and the dependent spikes.
 - Project scaffolding: CLAUDE.md, guardrails, goals/roadmap/decisions/outcomes docs,

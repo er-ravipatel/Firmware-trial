@@ -55,6 +55,8 @@ working in that area, and keep them updated as part of the work:
 - [docs/DESIGN.md](docs/DESIGN.md) — deep subsystem design (boot/layout, content, render, OTA).
 - [docs/IMPLEMENTATION.md](docs/IMPLEMENTATION.md) — implementation-level detail: bundle byte
   layout + tryboot, render state machine, C++ class map, web API + HEIC transcode.
+- [docs/SCENARIOS.md](docs/SCENARIOS.md) — behavioral spec: how the deployed product behaves
+  (online/offline, power loss, updates, faults, recovery) as testable Given/When/Then.
 - [docs/GOALS.md](docs/GOALS.md) — mission, success criteria, non-goals, constraints.
 - [docs/ROADMAP.md](docs/ROADMAP.md) — milestones and their target outcomes.
 - [docs/DECISIONS.md](docs/DECISIONS.md) — architecture decisions (ADRs) and rationale.
