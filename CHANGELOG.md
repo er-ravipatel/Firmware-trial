@@ -46,6 +46,9 @@ _Format loosely follows [Keep a Changelog](https://keepachangelog.com/)._
 - **Visible boot sequence** on the framebuffer (title + paced [ok] init steps: framebuffer, SD
   mount, photo scan, plugins) before the slideshow — watchable in a live QEMU window (WSLg).
   tools/run_qemu.sh opens an SDL window with the SD card attached.
+- **docs/STATUS.md** — a "resume here" handoff doc: current state, environment, build/run
+  cheat-sheet, code map, gotchas, and the pending WiFi/web-UI decision. Finding: stock QEMU can't
+  run Circle networking (usb-net RX broken → needs patched QEMU); WiFi is hardware-only (no CYW43).
 - **USB pendrive support:** Circle USB host + mass-storage stack integrated; kernel tries a USB
   drive first (USB:/), falls back to SD (SD:/), then the embedded image. Storage is now optional
   (boot no longer aborts without an SD card). Verified in QEMU: detects the pendrive, mounts FAT,

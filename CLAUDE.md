@@ -13,7 +13,8 @@ pipeline, web-admin, update agent) · Circle drivers (framebuffer, SD/FatFs, USB
 custom A/B OTA via Pi `tryboot` · HEIC via boundary transcode (browser/PC). Build via **WSL2** +
 `aarch64-none-elf`. Software (NEON) rendering — no GPU/GLES bare-metal.
 
-Full spec: [docs/PRD.md](docs/PRD.md).
+Full spec: [docs/PRD.md](docs/PRD.md). **Resuming work? Read [docs/STATUS.md](docs/STATUS.md)
+first** — current state, build/run commands, findings, and the pending next-step decision.
 
 > This file is the project's "master prompt." Claude Code loads it automatically at the
 > start of every session, so anything written here does not need to be repeated in chat.
