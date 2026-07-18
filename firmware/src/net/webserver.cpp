@@ -285,13 +285,15 @@ void CWebServer::Handle (CSocket *pConn, const u8 clientIP[4])
 	while (hdrEnd < 0 && total < 8192)
 	{
 		int r = pConn->Receive (m_pBuf + total, 8192 - total, 0);
-		if (r <= 0) return;
+		if (r <= 0)
+		{ CLogger::Get ()->Write (FromWeb, LogNotice, "recv bail r=%d after %u", r, total); return; }
 		total += (unsigned) r;
 		for (unsigned i = 3; i < total; i++)
 			if (m_pBuf[i-3]=='\r' && m_pBuf[i-2]=='\n' && m_pBuf[i-1]=='\r' && m_pBuf[i]=='\n')
 			{ hdrEnd = (int) (i + 1); break; }
 	}
-	if (hdrEnd < 0) return;
+	if (hdrEnd < 0)
+	{ CLogger::Get ()->Write (FromWeb, LogNotice, "no header end (total=%u)", total); return; }
 
 	// Method + path (stack copies, so we may reuse m_pBuf for a served file afterwards).
 	char method[8] = {0}, path[160] = {0};
@@ -386,6 +388,20 @@ void CWebServer::Handle (CSocket *pConn, const u8 clientIP[4])
 	{
 		settingsPage (Page, m_pConfig);   // GET / and captive-portal probes -> settings
 	}
+
+	// Diagnostic: what did we build for this request? (blank-page hunt — read the SD log.)
+	unsigned nLen = Page.GetLength ();
+	CLogger::Get ()->Write (FromWeb, LogNotice, "%s %s -> %u bytes", method, path, nLen);
+
+	if (nLen == 0)   // never ship a blank body — surfaces the failure instead of a white screen
+	{
+		static const char oops[] =
+			"<!DOCTYPE html><meta charset=utf-8><body style=\"font-family:sans-serif\">"
+			"<h2>Frame</h2><p>Page failed to build (empty). Check the SD log.</p>";
+		SendHead (pConn, "200 OK", "text/html; charset=utf-8", sizeof oops - 1);
+		sendAll (pConn, (const u8 *) oops, sizeof oops - 1);
+		return;
+	}
 	SendPage (pConn, (const char *) Page);
 }
 
@@ -407,6 +423,15 @@ void CWebServer::Run (void)
 		{
 			u8 clientIP[4] = {0, 0, 0, 0};
 			ForeignIP.CopyTo (clientIP);   // remember which phone this is (captive first-vs-later)
+
+			// CRITICAL: this server is single-threaded, so a socket that blocks in Receive
+			// stalls every other connection behind it. Browsers (esp. Safari) open speculative
+			// sockets that never send a request; without a timeout, Receive on one of those
+			// blocks forever and the real GET starves -> blank page. A short timeout drops idle
+			// sockets so the next connection gets served. (Mirrors Circle's own CHTTPDaemon.)
+			pConn->SetOptionReceiveTimeout (2 * 1000000);   // 2 s: legit requests arrive in ms
+			pConn->SetOptionSendTimeout    (5 * 1000000);   // don't hang forever on a dead peer
+
 			Handle (pConn, clientIP);
 			delete pConn;   // close (small CSocket object, safe to free)
 		}
