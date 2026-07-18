@@ -43,6 +43,14 @@ DNS + HTTP**, and the setup page **auto-opens on both Android and iOS** — full
 V3-01/02, V3-08 partial). The gating risk is retired. Key fixes: **drop `-DNO_SDHOST`** (SD card on
 SDHOST so EMMC is free for WiFi), a **hand-written DHCP server** and a **DNS responder** (Circle has
 neither) — all validated code in `firmware/src/net/` (dhcpd, dnsd, webserver) + docs/LEARNINGS.md.
+**Boot settings window DONE (2026-07-19):** every boot brings up the SoftAP + web server and shows
+the splash with a **Wi-Fi-join QR in the bottom-left + a 10 s countdown** ("Slideshow starts in N").
+If a phone joins (DHCP ACK sets `g_dhcpClientConnected`) → **settings mode** (serve the web page,
+slideshow paused, restart to apply); otherwise the slideshow starts and the **AP stays responsive**
+(cheap `m_CoopSched.Yield()` per frame — net+render+multicore coexistence verified on hardware). On-
+device **QR encoder** = vendored Nayuki qrcodegen (MIT). Gated by `wifi` in lumen.conf (default on);
+fails gracefully with no CYW43 (QEMU). This is the entry point for the settings web page.
+
 **Step 1c DONE (2026-07-18):** the whole net stack (SoftAP + DHCP + DNS + HTTP + captive portal) is
 now **integrated into the real kernel** (`RunPortalMode()`), gated by `portal = on` in `lumen.conf`.
 Verified on hardware: normal slideshow mode unchanged (net members inert), and portal mode brings up

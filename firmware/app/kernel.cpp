@@ -76,6 +76,7 @@ CKernel::CKernel (void)
     m_Canvas (m_Graphics),
     m_WLAN (FIRMWARE_PATH),
     m_Net (s_APIP, s_APMask, 0, 0, "lumen", NetDeviceTypeWLAN),
+    m_bNetUp (FALSE),
     m_ElapsedMs (0),
     m_DecodeCore (&m_Photo, CMemorySystem::Get ()),   // core-1 background decoder
     m_PluginCount (0)
@@ -284,6 +285,10 @@ void CKernel::RunSplashIntro (void)
         }
     }
 
+    // Bring up the SoftAP so the settings page is reachable during the splash window (default on;
+    // fails gracefully with no WiFi, e.g. in QEMU).
+    m_bNetUp = ReadConfigFlag ("wifi", TRUE) && BringUpNetwork ();
+
     // Phase A: fade the wordmark in over the gradient (~600 ms).
     unsigned nStart = CTimer::GetClockTicks () / 1000;
     for (;;)
@@ -302,11 +307,19 @@ void CKernel::RunSplashIntro (void)
     m_Photo.intro_load ();
     const u8 *pSharp = m_Photo.intro_sharp ();   // sharp first slideshow frame
 
-    // Phase C: hold the gradient + wordmark + credits for 10 s (readable, static frame).
-    m_Canvas.blit_rgb (0, 0, W, H, pGrad);
-    DrawWordmark (255);
-    m_Canvas.present ();
-    CTimer::SimpleMsDelay (10000);
+    // Phase C: 10 s settings window — splash + bottom-left Wi-Fi QR + countdown. Keep the AP
+    // responsive (yield) so a phone can join; if one does, hand off to settings mode.
+    unsigned nWinStart = CTimer::GetClockTicks () / 1000;
+    unsigned nLastRemain = 0;
+    for (;;)
+    {
+        if (m_bNetUp && g_dhcpClientConnected) { RunSettingsMode (); }   // does not return
+        unsigned e = CTimer::GetClockTicks () / 1000 - nWinStart;
+        if (e >= 10000) break;
+        unsigned nRemain = (10000 - e + 999) / 1000;
+        if (nRemain != nLastRemain) { DrawSplashWithQR (pGrad, m_bNetUp, nRemain); nLastRemain = nRemain; }
+        if (m_bNetUp) m_CoopSched.Yield (); else CTimer::SimpleMsDelay (20);
+    }
 
     // Phase D: dissolve the gradient into the first photo (~1000 ms) as the wordmark fades out.
     nStart = CTimer::GetClockTicks () / 1000;
@@ -384,6 +397,83 @@ void CKernel::DrawPortalScreen (void)
                          "or join Wi-Fi \"" AP_SSID "\"  (no password)",
                          C2DGraphics::AlignCenter, Font8x14);
     m_Canvas.present ();
+}
+
+// Bring up the SoftAP + DHCP/DNS/HTTP so the settings page is reachable. Non-fatal on failure
+// (e.g. QEMU has no CYW43) — the frame just runs the slideshow without networking.
+boolean CKernel::BringUpNetwork (void)
+{
+    boolean bOK = m_WLAN.Initialize ();
+    if (bOK) bOK = m_WLAN.CreateOpenNet (AP_SSID, AP_CHANNEL, FALSE);
+    if (bOK) bOK = m_Net.Initialize ();
+    if (!bOK)
+    {
+        m_Logger.Write (FromKernel, LogWarning, "SoftAP bring-up failed - running slideshow only");
+        return FALSE;
+    }
+    new CDHCPD (&m_Net, s_APIP);
+    new CDNSD (&m_Net, s_APIP);
+    new CWebServer (&m_Net);
+    m_Logger.Write (FromKernel, LogNotice, "SoftAP '%s' up - settings reachable", AP_SSID);
+    return TRUE;
+}
+
+// Draw the boot splash with a Wi-Fi-join QR in the bottom-left and a countdown. Used during the
+// 10 s settings window on every boot.
+void CKernel::DrawSplashWithQR (const u8 *pGrad, boolean bNet, unsigned nSeconds)
+{
+    const unsigned W = m_Canvas.width ();
+    const unsigned H = m_Canvas.height ();
+
+    m_Canvas.blit_rgb (0, 0, W, H, pGrad);
+    DrawWordmark (255);   // centered wordmark + tagline + credits + bottom-right build/mode
+
+    CString Count;
+    Count.Format ("Slideshow starts in %u ...", nSeconds);
+
+    if (bNet)
+    {
+        unsigned nMod = H / 150;
+        if (nMod < 4) nMod = 4;
+        if (nMod > 6) nMod = 6;
+        unsigned est = 37 * nMod;                       // 29 data + 8 quiet modules for this payload
+        unsigned qcx = 26 + est / 2;
+        unsigned qcy = H - 26 - est / 2;
+        unsigned dim = DrawQR ("WIFI:S:" AP_SSID ";T:nopass;;", qcx, qcy, nMod);
+        unsigned tx = 26 + dim + 18;
+        m_Graphics.DrawText (tx, qcy - 12, COLOR2D (232, 196, 138), "Scan to change settings",
+                             C2DGraphics::AlignLeft, Font8x16);
+        m_Graphics.DrawText (tx, qcy + 12, COLOR2D (200, 210, 224), (const char *) Count,
+                             C2DGraphics::AlignLeft, Font8x14);
+    }
+    else
+    {
+        m_Graphics.DrawText (W / 2, H - 40, COLOR2D (200, 210, 224), (const char *) Count,
+                             C2DGraphics::AlignCenter, Font8x14);
+    }
+    m_Canvas.present ();
+}
+
+// Once a phone has joined the AP: show a "connected" screen and serve the settings page forever
+// (the render loop is paused; the user applies settings and restarts to resume the slideshow).
+void CKernel::RunSettingsMode (void)
+{
+    const unsigned W = m_Canvas.width ();
+    const unsigned H = m_Canvas.height ();
+
+    m_Logger.Write (FromKernel, LogNotice, "Phone connected -> settings mode");
+    m_Canvas.clear (lf::rgb::Navy);
+    m_Graphics.DrawText (W / 2, H / 2 - 34, COLOR2D (232, 238, 246), "LUMEN FRAME",
+                         C2DGraphics::AlignCenter, Font12x22);
+    m_Graphics.DrawText (W / 2, H / 2 + 4, COLOR2D (127, 227, 192), "Phone connected",
+                         C2DGraphics::AlignCenter, Font8x16);
+    m_Graphics.DrawText (W / 2, H / 2 + 32, COLOR2D (200, 210, 224),
+                         "Configure the frame on your phone", C2DGraphics::AlignCenter, Font8x14);
+    m_Graphics.DrawText (W / 2, H / 2 + 56, COLOR2D (180, 190, 205),
+                         "then restart the frame to apply", C2DGraphics::AlignCenter, Font8x14);
+    m_Canvas.present ();
+
+    for (;;) { m_CoopSched.Yield (); }   // keep serving the web page until reboot
 }
 
 // Portal mode: bring up the SoftAP + DHCP/DNS/HTTP and serve the setup page. Blocks forever
@@ -504,6 +594,14 @@ TShutdownMode CKernel::Run (void)
         // Real elapsed time drives smooth Ken Burns + cross-fade animation (frame-rate
         // independent), instead of a fixed tick.
         m_ElapsedMs = CTimer::GetClockTicks () / 1000;
+
+        // Keep the SoftAP responsive during the slideshow (cheap when idle). If a phone joins,
+        // hand off to settings mode (pauses the slideshow until the frame is restarted).
+        if (m_bNetUp)
+        {
+            m_CoopSched.Yield ();
+            if (g_dhcpClientConnected) { RunSettingsMode (); }
+        }
 
         // USB hotplug: switch to a pendrive when inserted; fall back to the SD when removed.
         // Decide presence with a name-service lookup (no device I/O). This is the crucial safety

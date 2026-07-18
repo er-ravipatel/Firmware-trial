@@ -10,6 +10,10 @@
 #include <circle/net/socket.h>
 #include <circle/types.h>
 
+// Set TRUE once a client has taken a lease (completed a DHCP ACK) — i.e. a phone actually joined
+// the AP. The kernel polls this to switch from the splash/slideshow into settings mode.
+extern volatile bool g_dhcpClientConnected;
+
 class CDHCPD : public CTask
 {
 public:

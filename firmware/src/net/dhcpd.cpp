@@ -31,6 +31,8 @@ static const char From[] = "dhcpd";
 #define DHCP_REQUEST   3
 #define DHCP_ACK       5
 
+volatile bool g_dhcpClientConnected = false;   // set once a phone completes a lease (see dhcpd.h)
+
 CDHCPD::CDHCPD (CNetSubSystem *pNet, const u8 *pServerIP)
 :	m_pNet (pNet)
 {
@@ -104,7 +106,7 @@ void CDHCPD::HandlePacket (CSocket *pSocket, u8 *pMsg, unsigned nLen)
 
 	u8 nReplyType;
 	if (pType[0] == DHCP_DISCOVER)     nReplyType = DHCP_OFFER;
-	else if (pType[0] == DHCP_REQUEST) nReplyType = DHCP_ACK;
+	else if (pType[0] == DHCP_REQUEST) { nReplyType = DHCP_ACK; g_dhcpClientConnected = true; }
 	else return;                        // ignore RELEASE/DECLINE/INFORM for this minimal server
 
 	// Assign a stable-per-device address: 192.168.x.(100 + (MAC_last6bits)).

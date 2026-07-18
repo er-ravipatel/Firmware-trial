@@ -60,12 +60,20 @@ private:
     // Read a boolean key from SD:/lumen.conf (key=on/off/1/0/true/false). Returns bDefault when
     // the file or key is absent. Used to keep diagnostics OFF in production builds by default.
     boolean ReadConfigFlag (const char *pKey, boolean bDefault);
+    // Bring up the SoftAP + DHCP/DNS/HTTP so the settings page is reachable. Returns TRUE on
+    // success. Gated by "wifi" in lumen.conf (default on). Fails gracefully (e.g. in QEMU).
+    boolean BringUpNetwork (void);
     // Bring up the SoftAP + DHCP/DNS/HTTP and serve the setup page (blocks, runs the Circle
-    // scheduler). Entered on demand (config flag now; HEIC detection later). Does not return.
+    // scheduler). Debug path (portal=on). Does not return.
     void RunPortalMode (void);
+    // Shown once a phone has joined: serve the settings page forever (until reboot). Does not return.
+    void RunSettingsMode (void);
     // Encode pText as a QR and draw it centered at (cx,cy), nModulePx per module, with a white
     // quiet zone. Returns the drawn side length in px (0 on failure).
     unsigned DrawQR (const char *pText, unsigned cx, unsigned cy, unsigned nModulePx);
+    // Draw the boot splash (gradient + wordmark) with a Wi-Fi-join QR in the bottom-left and a
+    // "slideshow starts in N" countdown. Used during the 10 s settings window.
+    void DrawSplashWithQR (const u8 *pGrad, boolean bNet, unsigned nSeconds);
     // Draw the full portal/conversion screen (title + Wi-Fi-join QR + instructions). No hardware.
     void DrawPortalScreen (void);
 
@@ -86,8 +94,9 @@ private:
     CircleCanvas       m_Canvas;
     FATFS              m_FileSystemSD;
     FATFS              m_FileSystemUSB;
-    CBcm4343Device     m_WLAN;         // CYW43 WiFi (SoftAP) — only Initialized in portal mode
-    CNetSubSystem      m_Net;          // Circle TCP/IP — only Initialized in portal mode
+    CBcm4343Device     m_WLAN;         // CYW43 WiFi (SoftAP) — only Initialized when networking is on
+    CNetSubSystem      m_Net;          // Circle TCP/IP — only Initialized when networking is on
+    boolean            m_bNetUp;       // did the SoftAP/settings network come up this boot?
     CFileLogDevice     m_FileLog;
     CSdPhotoSource     m_PhotoSource;
     u32                m_ElapsedMs;     // animation clock (ms since boot)
