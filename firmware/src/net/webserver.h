@@ -11,6 +11,10 @@
 #include <circle/types.h>
 #include "Config.h"    // app-layer config; reachable via EXTRAINCLUDE=-I../app
 
+// Set TRUE when the settings page requests a restart (POST /restart). The kernel's settings-mode
+// loop polls this and reboots the Pi (after flushing the response).
+extern volatile bool g_restartRequested;
+
 class CWebServer : public CHTTPDaemon
 {
 public:

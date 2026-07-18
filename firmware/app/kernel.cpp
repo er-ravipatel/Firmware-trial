@@ -6,6 +6,7 @@
 #include <circle/timer.h>
 #include <circle/string.h>
 #include <circle/font.h>
+#include <circle/startup.h>   // reboot()
 #include <qrcodegen.h>   // Nayuki QR encoder (extern "C"); via EXTRAINCLUDE=-I../vendor/qrcodegen
 
 static const char FromKernel[] = "kernel";
@@ -482,10 +483,21 @@ void CKernel::RunSettingsMode (void)
     m_Graphics.DrawText (W / 2, H / 2 + 32, COLOR2D (200, 210, 224),
                          "Configure the frame on your phone", C2DGraphics::AlignCenter, Font8x14);
     m_Graphics.DrawText (W / 2, H / 2 + 56, COLOR2D (180, 190, 205),
-                         "then restart the frame to apply", C2DGraphics::AlignCenter, Font8x14);
+                         "Save, then tap Restart to apply", C2DGraphics::AlignCenter, Font8x14);
     m_Canvas.present ();
 
-    for (;;) { m_CoopSched.Yield (); }   // keep serving the web page until reboot
+    // Serve the settings page until the phone requests a restart; then reboot.
+    for (;;)
+    {
+        m_CoopSched.Yield ();
+        if (g_restartRequested)
+        {
+            m_Logger.Write (FromKernel, LogNotice, "restart requested from settings page -> reboot");
+            unsigned t0 = CTimer::GetClockTicks () / 1000;
+            while (CTimer::GetClockTicks () / 1000 - t0 < 1500) m_CoopSched.Yield ();   // flush reply
+            reboot ();
+        }
+    }
 }
 
 // Portal mode: bring up the SoftAP + DHCP/DNS/HTTP and serve the setup page. Blocks forever

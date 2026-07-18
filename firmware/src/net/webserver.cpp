@@ -23,6 +23,8 @@ static const char s_Head[] =
 "background:rgba(255,255,255,.08);color:#fff;font-size:15px}"
 "button{margin-top:22px;width:100%;padding:13px;border:0;border-radius:12px;background:#e8c48a;"
 "color:#2a1030;font-size:16px;font-weight:600}"
+"button:disabled{background:rgba(255,255,255,.12);color:#b299a6}"
+".r{background:#c0556f;color:#fff}"
 ".n{color:#b299a6;font-size:12px;text-align:center;margin-top:18px}"
 ".ok{color:#7fe3c0;font-size:16px;text-align:center;margin:26px 0 8px}"
 "a{color:#e8c48a}</style></head><body><div class=\"w\">";
@@ -36,10 +38,25 @@ CWebServer::CWebServer (CNetSubSystem *pNet, CConfig *pConfig, CSocket *pSocket)
 {
 }
 
+volatile bool g_restartRequested = false;   // set by POST /restart; polled by the kernel
+
 CWebServer::~CWebServer (void)
 {
 	m_pNet = 0;
 	m_pConfig = 0;
+}
+
+// TRUE if pPath contains pNeedle (e.g. the "/restart" endpoint).
+static boolean pathHas (const char *pPath, const char *pNeedle)
+{
+	if (pPath == 0) return FALSE;
+	for (const char *h = pPath; *h; h++)
+	{
+		const char *a = h, *b = pNeedle;
+		while (*a && *b && *a == *b) { a++; b++; }
+		if (*b == '\0') return TRUE;
+	}
+	return FALSE;
 }
 
 CHTTPDaemon *CWebServer::CreateWorker (CNetSubSystem *pNet, CSocket *pSocket)
@@ -115,31 +132,40 @@ static void field (CString &s, CConfig *cfg, const char *label, const char *key,
 THTTPStatus CWebServer::GetContent (const char *pPath, const char *pParams, const char *pFormData,
 				    u8 *pBuffer, unsigned *pLength, const char **ppContentType)
 {
-	(void) pPath; (void) pParams;
+	(void) pParams;
 
 	CString Page (s_Head);
+	const char *pName = m_pConfig != 0 ? m_pConfig->GetStr ("name", "LUMEN FRAME") : "LUMEN FRAME";
 
-	if (pFormData != 0 && pFormData[0] != '\0' && m_pConfig != 0)
+	if (pathHas (pPath, "restart"))
 	{
-		// POST: save and confirm.
+		// Restart requested — the kernel's settings loop will reboot after flushing this reply.
+		g_restartRequested = true;
+		Page.Append ("<h1>"); appendEsc (Page, pName);
+		Page.Append ("</h1><p class=\"ok\">&#10003; Restarting...</p>");
+		Page.Append ("<p class=\"n\">The frame is restarting to apply your settings.</p>");
+	}
+	else if (pFormData != 0 && pFormData[0] != '\0' && m_pConfig != 0)
+	{
+		// POST save: store, then offer the (now enabled) Restart button.
 		ApplyForm (pFormData);
-		Page.Append ("<h1>");
-		appendEsc (Page, m_pConfig->GetStr ("name", "LUMEN FRAME"));
+		Page.Append ("<h1>"); appendEsc (Page, m_pConfig->GetStr ("name", "LUMEN FRAME"));
 		Page.Append ("</h1><p class=\"ok\">&#10003; Saved</p>");
 		Page.Append ("<p class=\"n\">Restart the frame to apply the new settings.</p>");
+		Page.Append ("<form method=\"post\" action=\"/restart\"><button class=\"r\">Restart now</button></form>");
 		Page.Append ("<p class=\"n\"><a href=\"/\">Back to settings</a></p>");
 	}
 	else if (m_pConfig != 0)
 	{
-		// GET: settings form.
-		Page.Append ("<h1>");
-		appendEsc (Page, m_pConfig->GetStr ("name", "LUMEN FRAME"));
+		// GET: settings form. Restart button is disabled until a save happens.
+		Page.Append ("<h1>"); appendEsc (Page, pName);
 		Page.Append ("</h1><p class=\"s\">Frame settings</p><form method=\"post\">");
 		field (Page, m_pConfig, "Display name",     "name",    "LUMEN FRAME");
 		field (Page, m_pConfig, "Tagline",          "tagline", "Memory Lane Walkthrough");
 		field (Page, m_pConfig, "Wi-Fi name (SSID)","ssid",    "LumenFrame");
 		field (Page, m_pConfig, "Credits",          "credits", "");
 		Page.Append ("<button>Save</button></form>");
+		Page.Append ("<button class=\"r\" disabled>Restart (save first)</button>");
 		Page.Append ("<p class=\"n\">Changes apply after you restart the frame.</p>");
 	}
 
