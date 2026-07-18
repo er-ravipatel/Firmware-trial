@@ -1,11 +1,39 @@
 # RESUME HERE — Project Status & Handoff
 
-_Last updated: 2026-07-18. Read this first when picking the project back up._
+_Last updated: 2026-07-19. Read this first when picking the project back up._
 
 **What this is:** Lumen Frame — a digital photo frame built as a **genuine bare-metal firmware
 OS in C++ on the Circle framework** (no Linux) for a Raspberry Pi Zero 2 W, driving an Acer
 Aspire 4347 (14", 1366×768) LCD over HDMI. Broadened (InkyPi-inspired) into a modular smart
 display: rotating screen plugins (photo, clock, …). Developed **emulator-first** in QEMU.
+
+---
+
+## ▶▶ RESUME HERE (next session) — v0.3 "Universal", in progress
+
+**Currently building:** v0.3 (offline "any screen / any image"). Full plan: [PLAN-v0.3.md](PLAN-v0.3.md).
+The whole **networking + onboarding half is DONE and hardware-proven** (SoftAP + DHCP + DNS + HTTP +
+captive portal + on-device QR + a boot settings window). **Pick up at ONE of these two:**
+
+1. **Settings web page content** — the web server currently serves a placeholder "connected" page
+   (`firmware/src/net/webserver.cpp`). Build the real settings page + apply-on-restart, and route
+   **all on-screen/web text through config** (the [[configurable-branding]] requirement: name,
+   wordmark, tagline, credits, AP SSID — defaults in code → `lumen.conf` → web-editable).
+2. **The conversion flow (core v0.3)** — PLAN phases 2b/2c/3: **HEIC detection** on a pendrive
+   (classify displayable vs needs-conversion) → **Conversion-mode** trigger (replace nothing; it's a
+   new state) → the **libheif-WASM conversion page** (phone converts + resizes) → **FAT write-back**
+   to the pendrive → reboot-to-resume.
+
+**Build/deploy (hardware = SDHOST; see BUILD NOTE below):**
+`wsl bash -lc "cd /mnt/c/.../firmware/app && make -j4"` → `Copy-Item ...\app\kernel8.img D:\`.
+**QEMU note:** the current build is **SDHOST** so QEMU can't read the SD image (no config/photos);
+QEMU still renders (embedded image) — a `qrtest = on` config path and forcing `m_bNetUp=TRUE` were
+used to screenshot QR screens. **Card state:** `D:\lumen.conf` = `logging = on` (wifi defaults on →
+boot QR window). CYW43 firmware blobs live at `D:\firmware\` (needed for WiFi). Restore-to-normal
+isn't needed anymore — the boot-QR settings window *is* the normal behavior now.
+
+**Reusable spike/net code:** `firmware/src/net/` (dhcpd, dnsd, webserver) + `firmware/vendor/qrcodegen/`.
+Debug hooks: `portal = on` (full-screen portal via `RunPortalMode`), `qrtest = on` (QR render, QEMU).
 
 ---
 
