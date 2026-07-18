@@ -71,4 +71,9 @@ _Emulator-first (ADR-010): prove in QEMU, then confirm on real hardware._
 - [ ] **News / stocks / fun** plugins (headlines, ticker, XKCD, word-of-the-day).
 
 ## Backlog / ideas
+- **Configurable branding/text (owner req):** every user-facing string — device name/wordmark
+  ("LUMEN FRAME"), tagline, credits, Wi-Fi **AP SSID**, web page titles — must be **config-driven**
+  (defaults in code → overridden by `lumen.conf` → editable in the web UI), never hardcoded. Route
+  new text through a `CConfig`-style string layer (extend the current `ReadConfigFlag`). White-label
+  / personalize without recompiling. Web-editable part depends on the settings web UI.
 - SQLite port for the index; fleet update dashboard; multi-frame sync.
