@@ -51,7 +51,7 @@ if [ -n "$PHOTOS" ] && [ -d "$PHOTOS" ]; then
     i=1
     for f in "$PHOTOS"/*.heic "$PHOTOS"/*.jpg "$PHOTOS"/*.jpeg; do
         out="$(printf '%s/photos/%02d.jpg' "$OUT" "$i")"
-        if convert "$f" -resize '1000x1000>' -quality 85 -interlace none "$out" 2>/dev/null; then
+        if convert "$f" -resize '1920x1920>' -quality 85 -interlace none "$out" 2>/dev/null; then
             i=$((i + 1))
         fi
     done

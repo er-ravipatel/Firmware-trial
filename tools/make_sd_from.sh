@@ -15,7 +15,7 @@ i=1
 for f in "$SRC"/*.heic "$SRC"/*.jpg "$SRC"/*.jpeg; do
     out="$(printf '%s/%02d.jpg' "$TMP" "$i")"
     # Resize (only if larger), baseline (non-progressive) JPEG, keep EXIF orientation.
-    if convert "$f" -resize '1000x1000>' -quality 85 -interlace none "$out" 2>/dev/null; then
+    if convert "$f" -resize '1920x1920>' -quality 85 -interlace none "$out" 2>/dev/null; then
         info="$(identify -format '%wx%h orient=%[orientation]' "$out" 2>/dev/null || echo '?')"
         echo "  $(basename "$f")  ->  $(basename "$out")  [$info]"
         i=$((i + 1))

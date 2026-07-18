@@ -69,9 +69,11 @@ private:
     unsigned photo_start_ = 0;   // when the current photo first appeared
     unsigned fade_start_ = 0;    // when the current fade began
 
-    DecodedImage cur_{}, next_{};
-    uint8_t* fbA_ = nullptr;     // rendered frame for the current/outgoing photo
-    uint8_t* fbB_ = nullptr;     // rendered frame for the incoming photo
+    DecodedImage cur_{}, next_{};  // .rgb point at workA_/workB_ (reused, never per-photo malloc)
+    uint8_t* fbA_ = nullptr;       // rendered frame for the current/outgoing photo
+    uint8_t* fbB_ = nullptr;       // rendered frame for the incoming photo
+    uint8_t* workA_ = nullptr;     // fixed decoded-image buffers (kWorkMax^2*3), reused per photo
+    uint8_t* workB_ = nullptr;
     unsigned fw_ = 0, fh_ = 0;
 
     unsigned (*time_us_)() = nullptr;
