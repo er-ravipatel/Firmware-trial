@@ -585,6 +585,13 @@ TShutdownMode CKernel::Run (void)
     m_Logger.Write (FromKernel, LogNotice, "Boot: source=%s photos=%u res=%ux%u",
                     pSource, nPhotos, W, m_Canvas.height ());
 
+    // The firmware runs entirely from RAM (the Pi loads kernel8.img into RAM and executes there;
+    // no flash execution). Log total RAM + free heap so memory use is visible over time.
+    CMemorySystem *pMem = CMemorySystem::Get ();
+    m_Logger.Write (FromKernel, LogNotice, "RAM: total=%u MB  heap_free=%u KB (runs entirely in RAM)",
+                    (unsigned) (pMem->GetMemSize () / (1024 * 1024)),
+                    (unsigned) (pMem->GetHeapFreeSpace (HEAP_ANY) / 1024));
+
     SetupPlugins ();
 
     // Beautiful photo-hero splash (covers SD mount + first-photo decode, fades into the slideshow).
@@ -606,11 +613,15 @@ TShutdownMode CKernel::Run (void)
         // independent), instead of a fixed tick.
         m_ElapsedMs = CTimer::GetClockTicks () / 1000;
 
-        // Keep the SoftAP + web page responsive during the slideshow (cheap when idle). Connecting
-        // a phone does NOT pause the show — the user configures/converts while it keeps running.
+        // Give the network stack a real time-slice each frame so DHCP + the web page are responsive
+        // WITHOUT pausing the slideshow. (A single yield/frame starves the net: the page won't load
+        // and DHCP is marginal.) A bit of servicing normally so a phone can join; a bigger slice once
+        // one has (active HTTP). The slideshow just drops a few fps while a phone is connected.
         if (m_bNetUp)
         {
-            m_CoopSched.Yield ();
+            unsigned nWinUs = g_dhcpClientConnected ? 18000u : 5000u;
+            unsigned nY0 = CTimer::GetClockTicks ();
+            do { m_CoopSched.Yield (); } while (CTimer::GetClockTicks () - nY0 < nWinUs);
             CheckRestart ();
 
             // A conversion wrote a new JPEG back — re-scan so the photo resolves into the slideshow
@@ -693,10 +704,11 @@ TShutdownMode CKernel::Run (void)
             {
                 m_Logger.Write (FromKernel, LogNotice,
                     "perf: fps=%u frame_avg=%uus render_avg=%uus render_max=%uus "
-                    "present_avg=%uus present_max=%uus fade_frames=%u",
+                    "present_avg=%uus present_max=%uus fade_frames=%u heap_free=%uKB",
                     nFrames * 1000 / nWin, (nRenderSum + nPresentSum) / nFrames,
                     nRenderSum / nFrames, nRenderMax, nPresentSum / nFrames, nPresentMax,
-                    nFadeFrames);
+                    nFadeFrames,
+                    (unsigned) (CMemorySystem::Get ()->GetHeapFreeSpace (HEAP_ANY) / 1024));
                 nStatStartMs = m_ElapsedMs;
                 nFrames = nFadeFrames = 0;
                 nRenderSum = nRenderMax = nPresentSum = nPresentMax = 0;
