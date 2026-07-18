@@ -2,7 +2,7 @@
 // Web/USB/scheduler tasks post events; the render task is the sole consumer, keeping
 // render state lock-free (IMPLEMENTATION §2.2, §3.3).
 #pragma once
-#include <cstdint>
+#include <stdint.h>
 #include "../util/RingBuffer.h"
 
 namespace lf {

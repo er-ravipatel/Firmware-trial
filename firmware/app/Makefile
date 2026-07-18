@@ -9,7 +9,12 @@
 
 CIRCLEHOME = ../vendor/circle
 
-OBJS = main.o kernel.o
+# Our shared, freestanding source modules live under firmware/src.
+EXTRAINCLUDE = -I ../src
+
+OBJS = main.o kernel.o \
+       ../src/plugins/PhotoFramePlugin.o \
+       ../src/plugins/ClockPlugin.o
 
 LIBS = $(CIRCLEHOME)/lib/libcircle.a
 

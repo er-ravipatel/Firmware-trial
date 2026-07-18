@@ -1,7 +1,7 @@
 // Error codes for the Lumen Frame firmware.
 // Bare metal: no C++ exceptions — fallible operations return Result<T> (see Result.h).
 #pragma once
-#include <cstdint>
+#include <stdint.h>
 
 namespace lf {
 

@@ -3,7 +3,7 @@
 // so no locking is required as long as producers and the consumer only yield at task
 // boundaries. See IMPLEMENTATION §3.3.
 #pragma once
-#include <cstddef>
+#include <stddef.h>
 
 namespace lf {
 

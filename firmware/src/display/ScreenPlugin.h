@@ -30,6 +30,10 @@ public:
     // Whether the plugin currently has something worth showing (e.g. weather fetched ok).
     // The scheduler may skip a plugin that returns false.
     virtual bool has_content() const { return true; }
+
+    // If true, the render loop re-renders every tick (e.g. a live clock). If false, the
+    // plugin is drawn once on activation (e.g. a static photo) — cheaper.
+    virtual bool wants_continuous_redraw() const { return false; }
 };
 
 }  // namespace lf

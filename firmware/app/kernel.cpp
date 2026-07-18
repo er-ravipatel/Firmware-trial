@@ -1,14 +1,20 @@
 //
-// kernel.cpp — Lumen Frame boot splash.
+// kernel.cpp — Lumen Frame modular display loop.
 //
 #include "kernel.h"
 #include <circle/timer.h>
-#include <circle/string.h>
 
-#define LUMEN_VERSION "v0.0.1"
+// Fake time-of-day for scheduling until an RTC/NTP source exists (10:00). All plugin
+// windows are all-day for now, so this only matters once time-windowed plugins arrive.
+static const unsigned kNowMin = 600;
+static const unsigned kTickMs = 100;
 
 CKernel::CKernel (void)
-:   m_Screen (m_Options.GetWidth (), m_Options.GetHeight ())
+:   m_Graphics (m_Options.GetWidth (), m_Options.GetHeight (), FALSE),
+    m_Canvas (m_Graphics),
+    m_ElapsedMs (0),
+    m_Clock (&m_ElapsedMs),
+    m_PluginCount (0)
 {
 }
 
@@ -18,86 +24,63 @@ CKernel::~CKernel (void)
 
 boolean CKernel::Initialize (void)
 {
-    return m_Screen.Initialize ();
+    return m_Graphics.Initialize ();
 }
 
-void CKernel::Print (const char *pString)
+void CKernel::SetupPlugins (void)
 {
-    size_t nLen = 0;
-    while (pString[nLen] != '\0') nLen++;
-    m_Screen.Write (pString, nLen);
+    // Register plugins; m_Plugins[i] corresponds to scheduler slot i (same order).
+    m_Plugins[0] = &m_Photo;
+    m_Scheduler.add ({"photo", true, 2, -1, -1});   // 2s each
+
+    m_Plugins[1] = &m_Clock;
+    m_Scheduler.add ({"clock", true, 2, -1, -1});
+
+    m_PluginCount = 2;
 }
 
-void CKernel::FillRect (unsigned x, unsigned y, unsigned w, unsigned h, TScreenColor color)
+void CKernel::Activate (int nIndex)
 {
-    for (unsigned dy = 0; dy < h; dy++)
+    if (nIndex < 0)
     {
-        for (unsigned dx = 0; dx < w; dx++)
-        {
-            m_Screen.SetPixel (x + dx, y + dy, color);
-        }
+        return;
     }
-}
-
-void CKernel::DrawBorder (TScreenColor color)
-{
-    const unsigned W = m_Screen.GetWidth ();
-    const unsigned H = m_Screen.GetHeight ();
-    for (unsigned x = 0; x < W; x++)
-    {
-        m_Screen.SetPixel (x, 0, color);
-        m_Screen.SetPixel (x, H - 1, color);
-    }
-    for (unsigned y = 0; y < H; y++)
-    {
-        m_Screen.SetPixel (0, y, color);
-        m_Screen.SetPixel (W - 1, y, color);
-    }
-}
-
-void CKernel::DrawSplash (void)
-{
-    const unsigned W = m_Screen.GetWidth ();
-    const unsigned H = m_Screen.GetHeight ();
-
-    DrawBorder (NORMAL_COLOR);
-
-    // Accent bar under the title area.
-    FillRect (0, 64, W, 6, CYAN_COLOR);
-
-    // Color swatches near the bottom — proves color rendering across the framebuffer.
-    static const TScreenColor Swatches[] =
-        { RED_COLOR, GREEN_COLOR, BLUE_COLOR, YELLOW_COLOR, MAGENTA_COLOR, CYAN_COLOR };
-    const unsigned sw = 60, sh = 40, sy = H - 80, sx = 40, gap = 12;
-    for (unsigned i = 0; i < 6; i++)
-    {
-        FillRect (sx + i * (sw + gap), sy, sw, sh, Swatches[i]);
-    }
-
-    // Title + status text (console). Leading newlines push it below the accent bar.
-    Print ("\n\n\n\n\n");
-    Print ("        LUMEN FRAME\n\n");
-    Print ("        Bare-metal firmware OS\n");
-    Print ("        Circle + QEMU   |   Pi Zero 2 W (BCM2837)\n\n");
-
-    CString Status;
-    Status.Format ("        [ boot OK ]  framebuffer %u x %u\n", W, H);
-    m_Screen.Write ((const char *) Status, Status.GetLength ());
-
-    Print ("        " LUMEN_VERSION "\n");
+    m_Plugins[nIndex]->on_activate ();
+    m_Plugins[nIndex]->render (m_Canvas);
+    m_Canvas.present ();
 }
 
 TShutdownMode CKernel::Run (void)
 {
-    DrawSplash ();
+    SetupPlugins ();
 
-    // Heartbeat: blink the activity LED so a live device shows it's running.
+    Activate (m_Scheduler.next (kNowMin));
+    unsigned nSinceSwitchMs = 0;
+
     while (1)
     {
-        m_ActLED.On ();
-        CTimer::SimpleMsDelay (200);
-        m_ActLED.Off ();
-        CTimer::SimpleMsDelay (200);
+        CTimer::SimpleMsDelay (kTickMs);
+        m_ElapsedMs += kTickMs;
+        nSinceSwitchMs += kTickMs;
+
+        int nCur = m_Scheduler.current ();
+        if (nCur >= 0 && m_Plugins[nCur]->wants_continuous_redraw ())
+        {
+            m_Plugins[nCur]->update ();
+            m_Plugins[nCur]->render (m_Canvas);
+            m_Canvas.present ();
+        }
+
+        unsigned nDurMs = (nCur >= 0) ? m_Scheduler.at (nCur).duration_s * 1000u : 1000u;
+        if (nSinceSwitchMs >= nDurMs)
+        {
+            if (nCur >= 0)
+            {
+                m_Plugins[nCur]->on_deactivate ();
+            }
+            Activate (m_Scheduler.next (kNowMin));
+            nSinceSwitchMs = 0;
+        }
     }
 
     return ShutdownHalt;

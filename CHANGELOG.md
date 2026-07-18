@@ -28,6 +28,12 @@ _Format loosely follows [Keep a Changelog](https://keepachangelog.com/)._
 - **Our first firmware app** (firmware/app/): a Circle CKernel that boots and draws the Lumen
   Frame boot splash (border, accent bar, dynamic resolution text, color swatches). Verified
   rendering in QEMU — *our* code booting, not Circle's sample.
+- **Render loop + plugin architecture running in firmware:** ICanvas (device-neutral surface)
+  backed by C2DGraphics (double-buffered, pixel-accurate text); PhotoFrame + Clock ScreenPlugins
+  rotated by the (host-unit-tested) PluginScheduler on a timer. Verified in QEMU: photo screen
+  and live clock cycling every 2s. The tested host logic now drives real rendered frames.
+- Made the shared logic modules truly freestanding (C headers, no std::) so the same code
+  compiles for host unit tests and the bare-metal (-nostdinc++, -fno-exceptions) firmware.
 
 ### Changed
 - **Major pivot:** re-architected from a Linux appliance to a **genuine bare-metal firmware OS

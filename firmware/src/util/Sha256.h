@@ -1,8 +1,8 @@
 // SHA-256 — integrity primitive for OTA bundle verification (IMPLEMENTATION §1.3).
 // Self-contained, no dependencies; usable on host (tests) and bare metal (device).
 #pragma once
-#include <cstddef>
-#include <cstdint>
+#include <stddef.h>
+#include <stdint.h>
 
 namespace lf {
 

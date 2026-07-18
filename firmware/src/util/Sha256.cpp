@@ -1,5 +1,5 @@
 #include "Sha256.h"
-#include <cstring>
+#include <string.h>
 
 namespace lf {
 namespace {
@@ -66,7 +66,7 @@ void Sha256::update(const void* data, size_t len) {
     while (len > 0) {
         size_t take = 64 - buflen_;
         if (take > len) take = len;
-        std::memcpy(buf_ + buflen_, p, take);
+        memcpy(buf_ + buflen_, p, take);
         buflen_ += take;
         p += take;
         len -= take;

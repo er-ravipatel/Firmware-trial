@@ -4,9 +4,9 @@
 // among enabled + currently-active slots. Time is injected (now_min) so it is fully testable
 // without a real clock.
 #pragma once
-#include <cstddef>
-#include <cstdint>
-#include <cstring>
+#include <stddef.h>
+#include <stdint.h>
+#include <string.h>
 #include "../core/Result.h"
 
 namespace lf {
@@ -66,7 +66,7 @@ public:
 private:
     int find(const char* id) const {
         for (size_t i = 0; i < count_; ++i) {
-            if (std::strcmp(slots_[i].id, id) == 0) return int(i);
+            if (strcmp(slots_[i].id, id) == 0) return int(i);
         }
         return -1;
     }

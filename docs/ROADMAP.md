@@ -38,8 +38,9 @@ _Emulator-first (ADR-010): prove in QEMU, then confirm on real hardware._
 
 ## Milestone 4 — Plugins: local (modular smart display)
 **Target outcome:** more than one screen, rotated on a schedule via the web UI (InkyPi-style).
-- [ ] ScreenPlugin architecture wired into the render engine (interface + PluginScheduler done).
-- [ ] **Clock/date plugin** (local, FreeType) — the first non-photo plugin.
+- [x] ScreenPlugin architecture wired into the render engine (ICanvas/C2DGraphics + PluginScheduler),
+      running in firmware in QEMU: PhotoFrame + Clock cycling on a timer.
+- [ ] **Clock/date plugin** — upgrade from "time since boot" to real time (RTC/NTP).
 - [ ] Web UI: enable/disable/schedule plugins (per-slot duration + time windows).
 
 ## Milestone 5 — Plugins: network (TLS unlock)
