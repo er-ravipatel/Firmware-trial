@@ -5,6 +5,8 @@ _Format loosely follows [Keep a Changelog](https://keepachangelog.com/)._
 
 ## [Unreleased]
 ### Added
+- Test plan (TESTPLAN.md): 48 traceable test rows (P0 safety / P1 core / P2 delight) mapped from
+  scenarios and spikes, with pass criteria, types (unit/target/HIL), and a test-first order.
 - Behavioral scenario catalog (docs/SCENARIOS.md): 50+ Given/When/Then scenarios for the deployed
   product (online/offline, power loss, updates, network, faults, security, recovery) → feeds tests.
 - Deep subsystem design (docs/DESIGN.md): boot/image layout, content pipeline, render engine,
