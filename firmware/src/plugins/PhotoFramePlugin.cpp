@@ -6,8 +6,8 @@
 namespace lf {
 
 // Working resolution photos are downscaled to on load, so per-frame Ken Burns sampling reads a
-// small, cache-friendly image (the display frame is ~1024px wide; this leaves zoom headroom).
-static const unsigned kWorkMax = 1400;
+// small, cache-friendly image while staying sharp at full-screen (1366px) with zoom headroom.
+static const unsigned kWorkMax = 1600;
 
 static inline float clampf(float v, float lo, float hi) {
     return v < lo ? lo : (v > hi ? hi : v);
@@ -120,10 +120,11 @@ void PhotoFramePlugin::render_kb(const DecodedImage& img, float progress, int va
     float panX = lerpf(-pxs, pxs, progress) * (float) img.w;
     float panY = lerpf(-pys, pys, progress) * (float) img.h;
 
-    float fitScale = (float) W / img.w;
+    // COVER: fill the whole frame (crop overflow), so photos fill the screen with no bars.
+    float coverScale = (float) W / img.w;
     float s2 = (float) H / img.h;
-    if (s2 < fitScale) fitScale = s2;
-    float invS = 1.0f / (fitScale * z);
+    if (s2 > coverScale) coverScale = s2;
+    float invS = 1.0f / (coverScale * z);
     float srcCx = img.w * 0.5f + panX;
     float srcCy = img.h * 0.5f + panY;
 
@@ -165,11 +166,7 @@ void PhotoFramePlugin::render_kb(const DecodedImage& img, float progress, int va
 void PhotoFramePlugin::render(ICanvas& canvas) {
     const unsigned W = canvas.width();
     const unsigned H = canvas.height();
-    const unsigned fw = W * 3 / 4;
-    const unsigned fh = H * 3 / 5;
-    const unsigned fx = (W - fw) / 2;
-    const unsigned fy = (H - fh) / 2 - 8;
-    ensure_buffers(fw, fh);
+    ensure_buffers(W, H);   // full-screen frame buffers
 
     unsigned n = photo_count();
     unsigned t = now();
@@ -210,10 +207,7 @@ void PhotoFramePlugin::render(ICanvas& canvas) {
         }
     }
 
-    // --- Draw ---
-    canvas.clear(rgb::DarkGray);
-    canvas.fill_rect(fx - 6, fy - 6, fw + 12, fh + 12, rgb::White);
-
+    // --- Draw fullscreen (photo covers the whole display; no margins/bars) ---
     if (state_ == State::Fading) {
         float pOut = (float) (t - photo_start_) / kSpanMs;
         float pIn = (float) (t - fade_start_) / kSpanMs;
@@ -221,32 +215,12 @@ void PhotoFramePlugin::render(ICanvas& canvas) {
         render_kb(next_, pIn, next_variant_, fbB_);
         unsigned alpha = (t - fade_start_) * 256 / kFadeMs;
         if (alpha > 256) alpha = 256;
-        canvas.blit_rgb_blend(fx, fy, fw_, fh_, fbA_, fbB_, alpha);
+        canvas.blit_rgb_blend(0, 0, fw_, fh_, fbA_, fbB_, alpha);
     } else {
         float p = (float) (t - photo_start_) / kSpanMs;
         render_kb(cur_, p, cur_variant_, fbA_);
-        canvas.blit_rgb(fx, fy, fw_, fh_, fbA_);
+        canvas.blit_rgb(0, 0, fw_, fh_, fbA_);
     }
-
-    // Caption.
-    canvas.text(40, 12, "PHOTOS", rgb::White);
-    char caption[64];
-    unsigned k = 0;
-    if (n > 0) {
-        const char* pfx = "Photo ";
-        for (const char* p = pfx; *p; ++p) caption[k++] = *p;
-        int shown = (index_ < 0 ? 0 : index_) + 1;
-        caption[k++] = char('0' + (shown / 10) % 10);
-        caption[k++] = char('0' + shown % 10);
-        caption[k++] = '/';
-        caption[k++] = char('0' + (n / 10) % 10);
-        caption[k++] = char('0' + n % 10);
-    } else {
-        const char* s = "embedded";
-        for (const char* p = s; *p; ++p) caption[k++] = *p;
-    }
-    caption[k] = '\0';
-    canvas.text(40, H - 28, caption, rgb::White);
 }
 
 }  // namespace lf
