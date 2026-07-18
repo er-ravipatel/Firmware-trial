@@ -136,13 +136,14 @@ void PhotoFramePlugin::render_kb(const DecodedImage& img, float progress, int va
     }
     progress = clampf(progress, 0.0f, 1.0f);
 
+    // Gentle zoom, minimal pan — keeps the subject in frame (pan pushed content off-screen).
     float z0, z1, pxs, pys;
     switch (variant & 3) {
         default:
-        case 0: z0 = 1.00f; z1 = 1.14f; pxs =  0.04f; pys =  0.03f; break;
-        case 1: z0 = 1.14f; z1 = 1.00f; pxs = -0.04f; pys = -0.03f; break;
-        case 2: z0 = 1.00f; z1 = 1.12f; pxs = -0.04f; pys =  0.03f; break;
-        case 3: z0 = 1.12f; z1 = 1.00f; pxs =  0.04f; pys = -0.03f; break;
+        case 0: z0 = 1.00f; z1 = 1.08f; pxs =  0.015f; pys =  0.010f; break;
+        case 1: z0 = 1.08f; z1 = 1.00f; pxs = -0.015f; pys = -0.010f; break;
+        case 2: z0 = 1.00f; z1 = 1.07f; pxs = -0.015f; pys =  0.010f; break;
+        case 3: z0 = 1.07f; z1 = 1.00f; pxs =  0.015f; pys = -0.010f; break;
     }
     float z = lerpf(z0, z1, progress);
     float panX = lerpf(-pxs, pxs, progress) * (float) img.w;
