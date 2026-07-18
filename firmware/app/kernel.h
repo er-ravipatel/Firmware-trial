@@ -29,6 +29,7 @@
 #include "FileLogDevice.h"
 #include "SdPhotoSource.h"
 #include "DecodeCore.h"
+#include "Config.h"
 #include "app/PluginScheduler.h"       // via EXTRAINCLUDE=-I../src
 #include "plugins/PhotoFramePlugin.h"
 #include "net/dhcpd.h"
@@ -99,6 +100,7 @@ private:
     boolean            m_bNetUp;       // did the SoftAP/settings network come up this boot?
     CFileLogDevice     m_FileLog;
     CSdPhotoSource     m_PhotoSource;
+    CConfig            m_Config;        // SD:/lumen.conf key=value settings (name, wifi, logging, ...)
     u32                m_ElapsedMs;     // animation clock (ms since boot)
 
     lf::PluginScheduler<8> m_Scheduler;

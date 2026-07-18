@@ -12,7 +12,7 @@ CIRCLEHOME = ../vendor/circle
 # Our shared, freestanding source modules live under firmware/src; stb + qrcodegen under vendor/.
 EXTRAINCLUDE = -I ../src -I ../vendor/stb -I ../vendor/qrcodegen
 
-OBJS = main.o kernel.o \
+OBJS = main.o kernel.o Config.o \
        ../src/plugins/PhotoFramePlugin.o \
        ../src/content/JpegDecoder.o \
        ../src/content/ExifReader.o \

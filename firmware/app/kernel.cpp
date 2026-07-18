@@ -213,9 +213,9 @@ void CKernel::DrawWordmark (unsigned nAlpha)
     const unsigned H = m_Canvas.height ();
     const unsigned cx = W / 2;
 
-    // Brand wordmark.
+    // Brand wordmark (config-driven — see [[configurable-branding]]).
     T2DColor White = COLOR2D (232 * nAlpha / 255, 238 * nAlpha / 255, 246 * nAlpha / 255);
-    m_Graphics.DrawText (cx, H / 2 - 52, White, "LUMEN FRAME",
+    m_Graphics.DrawText (cx, H / 2 - 52, White, m_Config.GetStr ("name", "LUMEN FRAME"),
                          C2DGraphics::AlignCenter, Font12x22);
 
     // Thin warm-gold accent rule under the wordmark (harmonizes with the wine/plum gradient).
@@ -226,18 +226,20 @@ void CKernel::DrawWordmark (unsigned nAlpha)
 
     // Tagline.
     T2DColor Soft = COLOR2D (202 * nAlpha / 255, 212 * nAlpha / 255, 226 * nAlpha / 255);
-    m_Graphics.DrawText (cx, H / 2 - 8, Soft, "Memory Lane Walkthrough",
+    m_Graphics.DrawText (cx, H / 2 - 8, Soft, m_Config.GetStr ("tagline", "Memory Lane Walkthrough"),
                          C2DGraphics::AlignCenter, Font8x16);
 
     // Credits (the major attribution line).
     T2DColor Warm = COLOR2D (176 * nAlpha / 255, 184 * nAlpha / 255, 196 * nAlpha / 255);
     m_Graphics.DrawText (cx, H / 2 + 20, Warm,
-                         "Thought by Vikash   &   Guided by Ravi   &   Written by Claude",
+                         m_Config.GetStr ("credits",
+                             "Thought by Vikash   &   Guided by Ravi   &   Written by Claude"),
                          C2DGraphics::AlignCenter, Font8x14);
 
     // Build + mode, small, in the bottom-right corner.
     CString Meta;
-    Meta.Format ("v%s   |   %s   |   build %s", LUMEN_VERSION, LUMEN_MODE, LUMEN_BUILD);
+    Meta.Format ("v%s   |   %s   |   build %s", LUMEN_VERSION,
+                 m_Config.GetStr ("mode", LUMEN_MODE), LUMEN_BUILD);
     T2DColor Dim = COLOR2D (118 * nAlpha / 255, 130 * nAlpha / 255, 144 * nAlpha / 255);
     m_Graphics.DrawText (W - 14, H - 18, Dim, (const char *) Meta,
                          C2DGraphics::AlignRight, Font6x7);
@@ -287,7 +289,7 @@ void CKernel::RunSplashIntro (void)
 
     // Bring up the SoftAP so the settings page is reachable during the splash window (default on;
     // fails gracefully with no WiFi, e.g. in QEMU).
-    m_bNetUp = ReadConfigFlag ("wifi", TRUE) && BringUpNetwork ();
+    m_bNetUp = m_Config.GetBool ("wifi", TRUE) && BringUpNetwork ();
 
     // Phase A: fade the wordmark in over the gradient (~600 ms).
     unsigned nStart = CTimer::GetClockTicks () / 1000;
@@ -381,20 +383,24 @@ void CKernel::DrawPortalScreen (void)
     if (nMod < 4) nMod = 4;
     if (nMod > 12) nMod = 12;
 
+    const char *pSsid = m_Config.GetStr ("ssid", AP_SSID);
+    CString Payload, Join;
+    Payload.Format ("WIFI:S:%s;T:nopass;;", pSsid);
+    Join.Format ("or join Wi-Fi \"%s\"  (no password)", pSsid);
+
     unsigned qcy = H / 2 + 8;
-    unsigned dim = DrawQR ("WIFI:S:" AP_SSID ";T:nopass;;", W / 2, qcy, nMod);
+    unsigned dim = DrawQR ((const char *) Payload, W / 2, qcy, nMod);
     if (dim == 0) return;
     unsigned qtop = qcy - dim / 2;
     unsigned qbot = qcy + dim / 2;
 
-    m_Graphics.DrawText (W / 2, qtop - 46, COLOR2D (232, 238, 246), "LUMEN FRAME",
+    m_Graphics.DrawText (W / 2, qtop - 46, COLOR2D (232, 238, 246), m_Config.GetStr ("name", "LUMEN FRAME"),
                          C2DGraphics::AlignCenter, Font12x22);
     m_Graphics.DrawText (W / 2, qtop - 16, COLOR2D (200, 210, 224), "Photo conversion",
                          C2DGraphics::AlignCenter, Font8x16);
     m_Graphics.DrawText (W / 2, qbot + 22, COLOR2D (232, 196, 138), "Scan with your phone camera",
                          C2DGraphics::AlignCenter, Font8x16);
-    m_Graphics.DrawText (W / 2, qbot + 46, COLOR2D (180, 190, 205),
-                         "or join Wi-Fi \"" AP_SSID "\"  (no password)",
+    m_Graphics.DrawText (W / 2, qbot + 46, COLOR2D (180, 190, 205), (const char *) Join,
                          C2DGraphics::AlignCenter, Font8x14);
     m_Canvas.present ();
 }
@@ -403,8 +409,10 @@ void CKernel::DrawPortalScreen (void)
 // (e.g. QEMU has no CYW43) — the frame just runs the slideshow without networking.
 boolean CKernel::BringUpNetwork (void)
 {
+    const char *pSsid = m_Config.GetStr ("ssid", AP_SSID);   // config-driven AP name
+
     boolean bOK = m_WLAN.Initialize ();
-    if (bOK) bOK = m_WLAN.CreateOpenNet (AP_SSID, AP_CHANNEL, FALSE);
+    if (bOK) bOK = m_WLAN.CreateOpenNet (pSsid, AP_CHANNEL, FALSE);
     if (bOK) bOK = m_Net.Initialize ();
     if (!bOK)
     {
@@ -414,7 +422,7 @@ boolean CKernel::BringUpNetwork (void)
     new CDHCPD (&m_Net, s_APIP);
     new CDNSD (&m_Net, s_APIP);
     new CWebServer (&m_Net);
-    m_Logger.Write (FromKernel, LogNotice, "SoftAP '%s' up - settings reachable", AP_SSID);
+    m_Logger.Write (FromKernel, LogNotice, "SoftAP '%s' up - settings reachable", pSsid);
     return TRUE;
 }
 
@@ -433,13 +441,17 @@ void CKernel::DrawSplashWithQR (const u8 *pGrad, boolean bNet, unsigned nSeconds
 
     if (bNet)
     {
+        const char *pSsid = m_Config.GetStr ("ssid", AP_SSID);
+        CString Payload;
+        Payload.Format ("WIFI:S:%s;T:nopass;;", pSsid);   // Wi-Fi-join QR (open network)
+
         unsigned nMod = H / 150;
         if (nMod < 4) nMod = 4;
         if (nMod > 6) nMod = 6;
         unsigned est = 37 * nMod;                       // 29 data + 8 quiet modules for this payload
         unsigned qcx = 26 + est / 2;
         unsigned qcy = H - 26 - est / 2;
-        unsigned dim = DrawQR ("WIFI:S:" AP_SSID ";T:nopass;;", qcx, qcy, nMod);
+        unsigned dim = DrawQR ((const char *) Payload, qcx, qcy, nMod);
         unsigned tx = 26 + dim + 18;
         m_Graphics.DrawText (tx, qcy - 12, COLOR2D (232, 196, 138), "Scan to change settings",
                              C2DGraphics::AlignLeft, Font8x16);
@@ -463,8 +475,8 @@ void CKernel::RunSettingsMode (void)
 
     m_Logger.Write (FromKernel, LogNotice, "Phone connected -> settings mode");
     m_Canvas.clear (lf::rgb::Navy);
-    m_Graphics.DrawText (W / 2, H / 2 - 34, COLOR2D (232, 238, 246), "LUMEN FRAME",
-                         C2DGraphics::AlignCenter, Font12x22);
+    m_Graphics.DrawText (W / 2, H / 2 - 34, COLOR2D (232, 238, 246),
+                         m_Config.GetStr ("name", "LUMEN FRAME"), C2DGraphics::AlignCenter, Font12x22);
     m_Graphics.DrawText (W / 2, H / 2 + 4, COLOR2D (127, 227, 192), "Phone connected",
                          C2DGraphics::AlignCenter, Font8x16);
     m_Graphics.DrawText (W / 2, H / 2 + 32, COLOR2D (200, 210, 224),
@@ -484,10 +496,11 @@ void CKernel::RunPortalMode (void)
     const unsigned W = m_Canvas.width ();
     const unsigned H = m_Canvas.height ();
 
-    m_Logger.Write (FromKernel, LogNotice, "Portal mode: starting SoftAP '%s'", AP_SSID);
+    const char *pSsid = m_Config.GetStr ("ssid", AP_SSID);
+    m_Logger.Write (FromKernel, LogNotice, "Portal mode: starting SoftAP '%s'", pSsid);
 
     boolean bOK = m_WLAN.Initialize ();
-    if (bOK) bOK = m_WLAN.CreateOpenNet (AP_SSID, AP_CHANNEL, FALSE);
+    if (bOK) bOK = m_WLAN.CreateOpenNet (pSsid, AP_CHANNEL, FALSE);
     if (bOK) bOK = m_Net.Initialize ();
     if (!bOK)
     {
@@ -504,7 +517,7 @@ void CKernel::RunPortalMode (void)
     new CDNSD (&m_Net, s_APIP);
     new CWebServer (&m_Net);
 
-    m_Logger.Write (FromKernel, LogNotice, "Portal up: join Wi-Fi '%s' -> setup page opens", AP_SSID);
+    m_Logger.Write (FromKernel, LogNotice, "Portal up: join Wi-Fi '%s' -> setup page opens", pSsid);
 
     DrawPortalScreen ();
 
@@ -522,8 +535,9 @@ TShutdownMode CKernel::Run (void)
     // to the card every line (dev/testing only). A beta/dev build (see version.h) FORCES it on,
     // overriding the config, so a developer build is never silent. Serial logging is unaffected. ----
     boolean bSDMounted = (f_mount (&m_FileSystemSD, "SD:", 1) == FR_OK);
+    if (bSDMounted) m_Config.Load ("SD:/lumen.conf");                        // all settings in one place
     boolean bForced = VersionForcesLog ();                                   // beta/dev overrides config
-    boolean bLogEnabled = bSDMounted && (bForced || ReadConfigFlag ("logging", FALSE));
+    boolean bLogEnabled = bSDMounted && (bForced || m_Config.GetBool ("logging", FALSE));
     boolean bLogOpen = bLogEnabled && m_FileLog.Open ("SD:/lumenlog.txt");
     if (bLogOpen)
     {
@@ -534,15 +548,14 @@ TShutdownMode CKernel::Run (void)
                     LUMEN_VERSION, (int) bSDMounted, (int) bForced, (int) bLogOpen);
 
     // ---- QR render test (QEMU-friendly: draws the portal screen with NO WiFi, then halts). ----
-    if (bSDMounted && ReadConfigFlag ("qrtest", FALSE))
+    if (m_Config.GetBool ("qrtest", FALSE))
     {
         DrawPortalScreen ();
         for (;;) { CTimer::SimpleMsDelay (1000); }
     }
 
-    // ---- Portal mode (config-gated during bring-up; the HEIC-on-pendrive trigger replaces this
-    // flag later). When on, serve the Wi-Fi setup page instead of the slideshow. Does not return. ----
-    if (bSDMounted && ReadConfigFlag ("portal", FALSE))
+    // ---- Portal mode (debug): serve the Wi-Fi setup page full-screen instead of the slideshow. ----
+    if (m_Config.GetBool ("portal", FALSE))
     {
         RunPortalMode ();
     }
