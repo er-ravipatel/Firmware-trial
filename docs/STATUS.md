@@ -37,12 +37,16 @@ The core-1 decode needs `-DARM_ALLOW_MULTI_CORE` in **`vendor/circle/Config.mk`*
 `addon/SDCard`. Because Circle is gitignored, this flag is **not** in the repo — re-apply it after a
 fresh Circle clone or the app won't link (`CMultiCoreSupport` is `#ifdef`-guarded).
 
-## ⏸ WHERE WE STOPPED (next candidates)
-1. **WiFi + web UI (next milestone, "online"):** the big one. Finding (see "Gotchas"): **stock QEMU
-   cannot run Circle networking** (usb-net RX broken; needs patched QEMU); WiFi (CYW43) can't be
-   emulated at all → hardware-only. Approaches: **(A)** build web UI now, unit-test HTTP/JSON logic
-   on host, live-test on hardware *(recommended)*; **(B)** patched QEMU (larchcone) for Ethernet;
-   **(C)** develop directly on the Pi.
+## ▶ NEXT: v0.3 "Universal" — planned, see [PLAN-v0.3.md](PLAN-v0.3.md)
+Two pillars, **fully offline** (no internet): **(A) display-agnostic** — EDID auto-detect + safe
+fallback so it fills any HDMI screen (ADR-011); **(B) image-agnostic** — a pendrive with HEIC pops
+an on-screen **QR** → phone joins the Pi's **SoftAP** → converts in the **phone browser**
+(libheif-WASM) → JPEGs written **back to the pendrive** (ADR-012); plus PNG/GIF/BMP on-device
+(ADR-013). **Start with Spike W1 (CYW43 SoftAP bring-up)** — it's the gate and is hardware-only
+(unemulatable); Circle `addon/wlan/sample/hello_ap` shows it's possible. Full phased plan,
+risks, and pass/fail in PLAN-v0.3.md.
+
+_Deferred past v0.3: station-mode WiFi / home-LAN web admin, TLS (mbedTLS), OTA, network plugins._
 
 ---
 

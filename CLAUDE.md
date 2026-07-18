@@ -96,6 +96,29 @@ working in that area, and keep them updated as part of the work:
 **The refinement loop:** goals → build → test → outcomes → retrospective → learnings →
 promote durable lessons back into this file (CLAUDE.md) and GOALS.md.
 
+## Ways of working — decompose, de-risk, verify (the delivery loop)
+
+Never attempt a milestone or any non-trivial task in one shot. Break it down and drive it to
+completion in small, individually-verified steps:
+
+1. **Restate the goal + "done" criteria** in one line before starting.
+2. **Decompose into small tasks** — each independently buildable and verifiable (ideally one
+   concern / a small diff). Track them as a checklist (TodoWrite) and keep it current.
+3. **De-risk first.** Order tasks **risk-first**: prove the scariest unknown with a throwaway
+   spike before building features on top of it. If a spike fails, re-scope *before* sinking effort
+   (e.g. v0.3 Pillar B is gated by the SoftAP spike — see [docs/PLAN-v0.3.md](docs/PLAN-v0.3.md)).
+4. **One piece at a time.** Implement → build → **verify** (QEMU screenshot / host unit test /
+   hardware + SD log) → only then move to the next. Never batch many unverified changes.
+5. **Keep it bootable at every step.** Prefer small diffs; add a fallback so a new path *degrades*
+   (e.g. inline decode if multicore fails) instead of bricking the frame.
+6. **Report progress** against the checklist; surface blockers and decisions early. When a choice
+   is the owner's call (scope, product direction, risk trade-off), ask rather than guess.
+7. **Close the loop** when a milestone lands: update CHANGELOG / STATUS / LEARNINGS, bump the
+   version (`version.h`), tick the [TESTPLAN.md](TESTPLAN.md) rows, and commit.
+
+Anchor big work in the plan docs (`docs/PLAN-*.md`): follow the phases in order, and promote durable
+lessons into [docs/LEARNINGS.md](docs/LEARNINGS.md), then the durable ones up into this file.
+
 ## Notes for Claude
 
 - If a command or convention above is still a placeholder, ask me before assuming one.

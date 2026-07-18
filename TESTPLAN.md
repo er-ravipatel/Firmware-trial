@@ -92,6 +92,26 @@ _Status legend: ⬜ not run · 🟡 partial · ✅ pass · ❌ fail · 🚫 bloc
 
 ---
 
+## v0.3 "Universal" (planned — see [docs/PLAN-v0.3.md](docs/PLAN-v0.3.md))
+
+| ID | Verifies | Phase | Type | Pass criteria | Status |
+|----|----------|-------|------|----------------|--------|
+| V3-01 | **SoftAP bring-up (the gate)** | W1 | H | Phone sees "LumenFrame", joins with passphrase, gets a DHCP lease from the Pi | ⬜ |
+| V3-02 | HTTP page over the AP | W2 | H | Phone browser loads a page served by the Pi over the hotspot | ⬜ |
+| V3-03 | FAT **write** to USB | U1 | T+H | Pi `f_write`+`f_sync` a file to the pendrive → intact + visible on a PC | ⬜ |
+| V3-04 | EDID read + adaptive res | D1 | H | Connect a different-resolution HDMI screen → frame fills it; EDID + chosen mode logged | ⬜ |
+| V3-05 | Adaptive-res fallback | 1 | H | Screen with bad/absent EDID → safe fallback (no blank); `lumen.conf` force-pin works | ⬜ |
+| V3-06 | On-device PNG/GIF/BMP | 2 | U+T | PNG/GIF/BMP dropped on the card display directly | ⬜ |
+| V3-07 | Needs-conversion classifier | 2 | U | Scan of a mixed folder correctly lists exactly the HEIC/WebP/RAW/oversized files | ⬜ |
+| V3-08 | QR + captive-portal onboarding | 3 | H | Plug HEIC pendrive → full-screen QR + instructions → phone joins → page auto-opens (URL fallback shown) | ⬜ |
+| V3-09 | Phone-side convert + write-back | 4 | H | Real iPhone HEIC → browser converts (libheif-WASM) → JPEG written to pendrive → displays | ⬜ |
+| V3-10 | Pi never decodes HEIC | 4 | U+T | Conversion path: Pi only reads/serves/writes bytes; no image codec invoked on HEIC | ⬜ |
+| V3-11 | Pull-during-write safety | 5 | H | Remove pendrive mid-write → at most the in-flight file missing; existing files intact (temp+rename) | ⬜ |
+| V3-12 | Fully offline end-to-end | 5 | H | Entire flow with **no internet** (phone in airplane mode + Pi hotspot only) succeeds | ⬜ |
+| V3-13 | No v0.2 regression | 5 | T+H | Slideshow / gradient splash / multicore-smooth transitions / USB in-out unchanged | ⬜ |
+
+---
+
 ## Test-first order (matches roadmap)
 1. **Unit tests that need no hardware** (P0-09, P0-11, P1-06/07/10/20, P2-04): build the pure-logic
    modules host-side and test *now*, before the Pi work — de-risks logic early.

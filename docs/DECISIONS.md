@@ -129,3 +129,55 @@ why, and what we traded away. Append-only; supersede rather than delete._
   items (WiFi, OTA rollback, HDMI timing, perf) are validated on the real Pi in a later pass.
   Toolchain: `aarch64-linux-gnu-` (distro) for bare metal; fall back to ARM `aarch64-none-elf` if
   Circle needs it. Run via `tools/run_qemu.sh`.
+
+## ADR-011 — Adaptive HDMI resolution with EDID auto-detect + safe fallback
+
+- **Date:** 2026-07-18
+- **Status:** accepted (planned for v0.3, see [PLAN-v0.3.md](PLAN-v0.3.md))
+- **Context:** The frame currently pins 1366×768 in `config.txt` for the Acer panel because the
+  generic TV board may misreport EDID. Goal: be **display-agnostic** — work on any HDMI screen.
+- **Decision:** Let the GPU auto-detect the native mode from **EDID**, but keep a **safe pinned
+  fallback** so a board that lies about (or omits) EDID can never blank the screen. Read + log EDID
+  from our kernel via the Circle mailbox; expose a `lumen.conf` override (`resolution = auto |
+  WxH`). The render engine is **already resolution-independent** (draws from `canvas.width/height`),
+  so no render rewrite — just verify odd/non-16:9 aspect ratios.
+- **Alternatives considered:** *Keep hardcoding per panel* (rejected — not a product). *Pure
+  EDID auto with no fallback* (rejected — that's exactly what blanked the screen before).
+- **Consequences:** One image works on any screen; a misbehaving screen degrades to the fallback
+  or a manual pin instead of a black display. HDMI mode is still ultimately GPU/config.txt-set
+  (bare metal can't re-mode after boot), so "auto" is a boot-config strategy + our EDID logging.
+
+## ADR-012 — Offline image normalization via phone-side transcode (QR + SoftAP, no internet)
+
+- **Date:** 2026-07-18
+- **Status:** accepted (planned for v0.3) — refines ADR-007
+- **Context:** Bare metal can't decode HEIC/WebP/RAW (ADR-007), yet users drop iPhone HEIC on a
+  pendrive. We want it to "just work" **with no internet** and no companion PC step.
+- **Decision:** When a pendrive contains un-displayable files, the frame brings up its own **WiFi
+  SoftAP on demand** and shows a **full-screen QR** (WiFi-join payload) + instructions. The phone
+  joins the hotspot; a captive portal opens a page the Pi serves; the page converts the images
+  **in the phone's browser** (libheif-WASM: decode + resize to ~1920px + re-encode JPEG) and uploads
+  the JPEGs; the Pi **writes them back to the same pendrive**. The Pi shuttles bytes and never
+  decodes an image. Everything is local — **zero internet**.
+- **Alternatives considered:** *Companion PC converter* (kept as the fallback if SoftAP bring-up
+  fails — still offline, but less seamless). *On-device HEIC decode* (infeasible — ADR-007).
+  *Cloud transcode* (rejected — violates the no-internet constraint). *Station-mode WiFi + LAN
+  upload* (deferred — needs home WiFi; SoftAP is zero-config).
+- **Consequences:** iPhone photos work fully offline with only the phone the user already has, using
+  the phone's compute. Costs: **CYW43 SoftAP bare-metal bring-up is the gating risk** (unemulatable;
+  Circle `hello_ap` shows it's possible), plus an HTTP/DNS/captive-portal server, an on-device QR
+  encoder, and FAT **write** to USB (new path). Converted JPEGs persist on the pendrive → fast reuse.
+
+## ADR-013 — Expand on-device decode to JPEG/PNG/GIF/BMP (stb); heavy formats at the boundary only
+
+- **Date:** 2026-07-18
+- **Status:** accepted (planned for v0.3)
+- **Context:** stb is currently built `STBI_ONLY_JPEG`. PNG/GIF/BMP are cheap to enable and make
+  "drop anything common on the card" work without the conversion flow.
+- **Decision:** Enable **PNG, GIF, BMP** in stb alongside JPEG (keep the fixed pool allocator +
+  `STBI_NO_THREAD_LOCALS` + `STBI_NO_SIMD`). **HEIC/WebP/RAW stay boundary-only** (ADR-012) — never
+  decoded on-device. A scanner classifies files into *displayable* vs *needs-conversion*.
+- **Alternatives considered:** *Add libwebp* (deferred — real porting effort/RAM; WebP is rarer than
+  HEIC). *Keep JPEG-only* (rejected — PNG/GIF/BMP are nearly free).
+- **Consequences:** More formats "just work" directly; small code-size increase. The image-agnostic
+  promise is: common raster formats on-device, HEIC/WebP/RAW via the phone-side boundary.

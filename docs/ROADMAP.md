@@ -3,6 +3,20 @@
 _Milestones toward [GOALS.md](GOALS.md). Full detail in [PRD.md](PRD.md)._
 _Architecture: bare-metal C++ firmware on Circle (no Linux)._
 
+## 🚩 Current: v0.3 "Universal" — any HDMI screen · any image · fully offline
+**Detailed work plan: [PLAN-v0.3.md](PLAN-v0.3.md).** Two pillars, no internet ever:
+- **A — Display-agnostic:** EDID auto-detect + safe fallback → fills any HDMI screen (ADR-011).
+- **B — Image-agnostic (offline):** a pendrive with HEIC → on-screen **QR** → phone joins the Pi's
+  **SoftAP** → converts in the **phone browser** (libheif-WASM) → JPEGs written **back to the
+  pendrive** (ADR-012). Plus PNG/GIF/BMP on-device (ADR-013).
+
+Risk-first order: **Spike W1 (SoftAP bring-up) gates Pillar B** — do it first. Pillar A runs in
+parallel (low risk). Shipped milestones: **v0.1.0-beta "offline"** (hardware bring-up), **v0.2.0-beta
+"smooth & polished"** (multicore decode, gradient splash, USB race fix) — see [../CHANGELOG.md](../CHANGELOG.md).
+
+---
+
+
 ## Milestone 0 — Environment & de-risk spikes (do first)
 **Target outcome:** the toolchain works and the scariest bare-metal unknowns are proven.
 _Emulator-first (ADR-010): prove in QEMU, then confirm on real hardware._
