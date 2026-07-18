@@ -1,7 +1,9 @@
 # Firmware-trial — Lumen Frame
 
-Digital photo frame **appliance firmware** for a **Raspberry Pi Zero 2 W** (512 MB RAM)
-driving a repurposed laptop LCD over HDMI (via a generic TV driver board).
+**Modular smart display** (InkyPi-inspired) firmware for a **Raspberry Pi Zero 2 W** (512 MB RAM)
+driving a repurposed laptop LCD over HDMI (via a generic TV driver board). Rotating screen
+**plugins** — photo frame first, then clock/weather/calendar/news — managed via a web UI.
+Photo-frame-first, plugin-ready (see ADR-008/009).
 
 **Architecture: a genuine bare-metal firmware OS in C++ on the [Circle](https://github.com/rsta2/circle)
 framework — no Linux.** The Pi boots our `kernel8.img` directly.

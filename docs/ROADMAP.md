@@ -30,9 +30,21 @@ _Architecture: bare-metal C++ firmware on Circle (no Linux)._
 - [ ] Clock overlay (FreeType); PNG/WebP; albums/shuffle/favorites.
 
 ## Milestone 3 — Delight layer
-- [ ] Weather overlay (needs mbedTLS/TLS port).
 - [ ] WiFi sync (Immich/SMB); short MJPEG clips.
 - [ ] Optional PIR wake / ambient-light brightness.
+
+## Milestone 4 — Plugins: local (modular smart display)
+**Target outcome:** more than one screen, rotated on a schedule via the web UI (InkyPi-style).
+- [ ] ScreenPlugin architecture wired into the render engine (interface + PluginScheduler done).
+- [ ] **Clock/date plugin** (local, FreeType) — the first non-photo plugin.
+- [ ] Web UI: enable/disable/schedule plugins (per-slot duration + time windows).
+
+## Milestone 5 — Plugins: network (TLS unlock)
+**Target outcome:** internet-driven screens.
+- [ ] **Shared TLS+JSON+HttpClient layer** (mbedTLS port) — ADR-009, the one-time unlock.
+- [ ] **Weather** plugin.
+- [ ] **Calendar/agenda** plugin (CalDAV/Google).
+- [ ] **News / stocks / fun** plugins (headlines, ticker, XKCD, word-of-the-day).
 
 ## Backlog / ideas
 - SQLite port for the index; fleet update dashboard; multi-frame sync.

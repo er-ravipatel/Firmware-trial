@@ -83,3 +83,33 @@ why, and what we traded away. Append-only; supersede rather than delete._
 - **Alternatives considered:** On-device decode (infeasible); drop HEIC (rejected — loses iPhone).
 - **Consequences:** iPhone photos supported without a bare-metal HEVC decoder; adds a small
   browser transcode + companion tool to build.
+
+## ADR-008 — Modular ScreenPlugin architecture (InkyPi-inspired)
+
+- **Date:** 2026-07-18
+- **Status:** accepted
+- **Context:** Product vision broadened (ref: InkyPi) from "photo frame" to a **modular smart
+  display**: multiple screens (photo, clock, weather, calendar, news) rotated on a schedule and
+  managed via the web UI. On a full-color HDMI LCD, not e-ink.
+- **Decision:** A `ScreenPlugin` interface (`id/on_activate/update/render/has_content`) + a
+  `PluginScheduler` playlist (per-slot duration + optional time window, midnight-wrap aware).
+  PhotoFrame is plugin #1; the render engine composites whatever the active plugin draws;
+  the EventBus/web UI enable & schedule plugins. **Photo-frame-first**, plugin-ready from day one.
+- **Alternatives considered:** hard-coded photo-only app (rejected — reframe would be a rewrite);
+  copy InkyPi on Linux/Python (rejected — contradicts the bare-metal-firmware goal, ADR-004).
+- **Consequences:** No rewrite — the existing architecture already fits. Local plugins
+  (photo, clock) are cheap; network plugins depend on ADR-009. Slight added structure now.
+
+## ADR-009 — Shared TLS + JSON layer for network plugins
+
+- **Date:** 2026-07-18
+- **Status:** accepted (scheduled after MVP)
+- **Context:** Weather, Calendar, News/stocks each need HTTPS + JSON + a specific API. Building
+  that per-plugin is wasteful and risky.
+- **Decision:** Build **one** shared layer — **mbedTLS** (HTTPS client) + a small **JSON parser**
+  + an `HttpClient` — as a single unlock, *then* add the network plugins on top. Local plugins
+  (Clock) ship first and need none of it.
+- **Alternatives considered:** per-plugin ad-hoc networking (rejected — duplication); plain HTTP
+  (rejected — most modern APIs require TLS).
+- **Consequences:** Moves the mbedTLS port from "later" to a scheduled core milestone (M-plugins).
+  Once done, all network plugins become cheap. Adds a meaningful chunk of bare-metal porting work.

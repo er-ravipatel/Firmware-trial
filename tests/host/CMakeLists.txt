@@ -14,6 +14,7 @@ add_executable(host_tests
     test_sha256.cpp
     test_ringbuffer.cpp
     test_eventbus.cpp
+    test_plugin_scheduler.cpp
     ${FW_SRC}/util/Sha256.cpp
 )
 

@@ -3,9 +3,11 @@
 _The "why." See [PRD.md](PRD.md) for the full spec._
 
 ## Mission
-Build a polished **digital photo frame appliance** on a Raspberry Pi Zero 2 W driving a
-repurposed laptop LCD (via a generic HDMI TV board) — that feels like a consumer product:
-effortless setup, effortless content, self-maintaining via OTA.
+Build a polished **modular smart display** (InkyPi-inspired) on a Raspberry Pi Zero 2 W driving a
+repurposed laptop LCD (via a generic HDMI TV board), as a **genuine bare-metal firmware OS**.
+Multiple screen "plugins" — **photo frame first**, then clock, weather, calendar, news — rotate on
+a schedule and are managed from a web UI. Full-color HDMI (not e-ink). Effortless setup,
+effortless content, self-maintaining via OTA.
 
 ## Success criteria
 - [ ] Powers on to a fullscreen slideshow with smooth transitions, no keyboard/console needed.
@@ -14,6 +16,7 @@ effortless setup, effortless content, self-maintaining via OTA.
 - [ ] Firmware updates apply over the air atomically and roll back automatically on failure.
 - [ ] Survives sudden power loss and bad updates without bricking or corruption.
 - [ ] Runs comfortably within the 512 MB RAM budget.
+- [ ] Modular: new screen plugins (clock/weather/etc.) can be added and scheduled without a rewrite.
 
 ## Non-goals (for now)
 - Battery/portable operation (mains-powered wall frame).
