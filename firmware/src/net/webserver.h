@@ -33,10 +33,7 @@ public:
 	void Run (void) override;   // listen on :80, accept + handle connections forever
 
 private:
-	void Handle (CSocket *pConn, const u8 clientIP[4]);
-	// true if this phone already saw the captive portal once (so we now report "online" and keep
-	// it joined); false the first time (marks it, and the caller lets the portal auto-open).
-	bool CaptiveSeenAndMark (const u8 ip[4]);
+	void Handle (CSocket *pConn);
 	void SendHead (CSocket *pConn, const char *pStatus, const char *pType, unsigned nLen);
 	void SendPage (CSocket *pConn, const char *pHtml);   // text/html 200
 	void ServeHeic (CSocket *pConn, const char *pQuery);
@@ -47,10 +44,6 @@ private:
 	lf::IPhotoSource *m_pPhotos;
 	u8               *m_pBuf;      // reused buffer (request/body/file); allocated once, never freed
 	unsigned          m_nBufSize;
-
-	u8                m_Seen[8][4];   // recent phones shown the captive portal (ring)
-	unsigned          m_nSeen;        // valid entries in m_Seen (<= 8)
-	unsigned          m_SeenNext;     // next ring slot to overwrite
 };
 
 #endif
