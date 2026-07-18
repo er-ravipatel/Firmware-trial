@@ -266,6 +266,12 @@ void PhotoFramePlugin::set_convert_qr(const char* payload) {
     qr_payload_[i] = '\0';
 }
 
+void PhotoFramePlugin::set_convert_hint(const char* ssid) {
+    unsigned i = 0;
+    for (; ssid && ssid[i] && i + 1 < sizeof(convert_hint_); ++i) convert_hint_[i] = ssid[i];
+    convert_hint_[i] = '\0';
+}
+
 // Encode `text` as a QR and draw it centered at (cx,cy) via the device-neutral canvas.
 void PhotoFramePlugin::draw_qr(ICanvas& canvas, const char* text, unsigned cx, unsigned cy, unsigned mod) {
     static const int kMaxVer = 8;
@@ -287,24 +293,47 @@ void PhotoFramePlugin::draw_qr(ICanvas& canvas, const char* text, unsigned cx, u
                                  y0 + (quiet + (unsigned)my) * mod, mod, mod, Rgb{0, 0, 0});
 }
 
-// "Needs-convert" placeholder: dark background + Wi-Fi-join QR + "scan to convert" + file name.
-// Non-disruptive — this is just what the slide shows for its dwell, then the slideshow moves on.
+// "Needs-convert" placeholder: dark background + a single, progressive QR guide. Step 1 shows a
+// Wi-Fi-join QR; once a phone has joined the AP (net_ready_) the slide switches live to step 2, a
+// URL QR that opens the converter in the phone's browser. One QR at a time keeps it unambiguous.
+// Non-disruptive — the slideshow moves on after the dwell.
 void PhotoFramePlugin::render_convert_slide(ICanvas& canvas, const char* filename) {
     const unsigned W = canvas.width(), H = canvas.height();
     canvas.clear(Rgb{22, 16, 34});   // dark plum, matching the brand
 
+    const Rgb accent{232, 196, 138}, dim{198, 208, 222}, faint{150, 132, 158}, ok{140, 214, 170};
+    auto ctext = [&](const char* s, unsigned y, Rgb c) {   // centered horizontally
+        unsigned n = 0; while (s[n]) n++;
+        canvas.text(W / 2 - n * 4, y, s, c);
+    };
+
     unsigned mod = H / 150; if (mod < 4) mod = 4; if (mod > 7) mod = 7;
     unsigned qdim = 37 * mod;
-    unsigned qcy = H / 2 - 8;
-    if (qr_payload_[0]) draw_qr(canvas, qr_payload_, W / 2, qcy, mod);
+    unsigned qcy = H / 2 + 6;
 
-    const char* msg = "Scan to convert this photo";
-    unsigned ml = 0; while (msg[ml]) ml++;
-    canvas.text(W / 2 - ml * 4, qcy + qdim / 2 + 18, msg, Rgb{232, 196, 138});
-    if (filename && filename[0]) {
-        unsigned fl = 0; while (filename[fl]) fl++;
-        canvas.text(W / 2 - fl * 4, qcy + qdim / 2 + 40, filename, Rgb{198, 208, 222});
+    ctext("THIS PHOTO NEEDS CONVERTING", qcy - qdim / 2 - 30, accent);
+
+    bool connected = net_ready_ && *net_ready_;
+    unsigned y = qcy + qdim / 2 + 16;
+
+    if (!connected && convert_hint_[0]) {
+        // Step 1 — join the frame's Wi-Fi (QR encodes an open-network join).
+        char wifi[80]; unsigned k = 0;
+        for (const char* p = "WIFI:S:"; *p && k + 1 < sizeof wifi; ++p) wifi[k++] = *p;
+        for (const char* p = convert_hint_; *p && k + 1 < sizeof wifi; ++p) wifi[k++] = *p;
+        for (const char* p = ";T:nopass;;"; *p && k + 1 < sizeof wifi; ++p) wifi[k++] = *p;
+        wifi[k] = '\0';
+        draw_qr(canvas, wifi, W / 2, qcy, mod);
+        ctext("Step 1 of 2  -  Scan to join Wi-Fi", y, dim);   y += 22;
+        ctext(convert_hint_, y, accent);
+    } else {
+        // Step 2 — phone is on the AP (or no SSID to show): scan to open the converter.
+        draw_qr(canvas, qr_payload_, W / 2, qcy, mod);
+        if (connected) { ctext("Connected  -  Step 2 of 2", y, ok); y += 22; }
+        ctext("Scan to open the converter", y, dim);
     }
+
+    if (filename && filename[0]) ctext(filename, qcy + qdim / 2 + 66, faint);
 }
 
 void PhotoFramePlugin::render(ICanvas& canvas) {

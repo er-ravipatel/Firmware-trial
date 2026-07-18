@@ -122,6 +122,8 @@ void CKernel::SetupPlugins (void)
     // phone CAMERA opens it in full Safari (which decodes HEIC + can convert via canvas) — unlike
     // the boot splash's Wi-Fi-join QR, which lands in the limited captive-portal browser.
     m_Photo.set_convert_qr ("http://192.168.1.1/photos");
+    m_Photo.set_convert_hint (m_Config.GetStr ("ssid", AP_SSID));   // "join this Wi-Fi first"
+    m_Photo.set_connected_flag (&g_dhcpClientConnected);            // QR 1 -> QR 2 once a phone joins
 
     m_Plugins[0] = &m_Photo;
     m_Scheduler.add ({"photo", true, 90, -1, -1});   // slideshow is the only screen

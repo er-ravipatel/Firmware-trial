@@ -23,8 +23,16 @@ public:
     void set_source(IPhotoSource* source) { source_ = source; reset(); }
     void set_clock(const uint32_t* elapsed_ms) { ms_ = elapsed_ms; }
 
-    // Wi-Fi-join QR payload drawn on "needs-convert" slides (set once by the kernel from config).
+    // The convert slide's QR payload — a URL (http://<ap-ip>/photos) opened in the phone's browser
+    // once it is on the frame's Wi-Fi. Set once by the kernel from config.
     void set_convert_qr(const char* payload);
+
+    // Wi-Fi network name shown on convert slides ("join this network first"). Config-driven SSID.
+    void set_convert_hint(const char* ssid);
+
+    // Live "a phone has joined the AP" flag. The convert slide shows QR 1 (join Wi-Fi) until this
+    // is set, then switches to QR 2 (open the converter) — progressive, so only one QR at a time.
+    void set_connected_flag(const volatile bool* flag) { net_ready_ = flag; }
 
     // Wait for the background decoder (core 1) to go idle — call before re-scanning the source
     // from core 0 (e.g. after a conversion writes a new file), so the two don't race on FatFs.
@@ -122,7 +130,9 @@ private:
     bool bg_posted_ = false;     // core 0: a background decode job is outstanding
     bool cur_convert_ = false;   // is the current slide a needs-convert placeholder (show QR)?
     bool next_convert_ = false;
-    char qr_payload_[80] = {0};  // Wi-Fi-join QR string drawn on convert slides
+    char qr_payload_[80] = {0};  // URL drawn as a QR on convert slides (opens the phone's browser)
+    char convert_hint_[48] = {0};// Wi-Fi SSID shown on convert slides ("join this network first")
+    const volatile bool* net_ready_ = nullptr;  // -> g_dhcpClientConnected (a phone has joined)
     int cur_variant_ = 0, next_variant_ = 0;
     State state_ = State::Empty;
     unsigned photo_start_ = 0;   // when the current photo first appeared

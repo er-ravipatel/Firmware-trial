@@ -50,8 +50,26 @@ static const char s_Head[] =
 static const char s_Foot[] = "</div></body></html>";
 
 CWebServer::CWebServer (CNetSubSystem *pNet, CConfig *pConfig, lf::IPhotoSource *pPhotos)
-:	m_pNet (pNet), m_pConfig (pConfig), m_pPhotos (pPhotos), m_pBuf (0), m_nBufSize (BUF_SIZE)
+:	m_pNet (pNet), m_pConfig (pConfig), m_pPhotos (pPhotos), m_pBuf (0), m_nBufSize (BUF_SIZE),
+	m_nSeen (0), m_SeenNext (0)
 {
+}
+
+// Has this phone already been shown the captive portal? First call for an IP returns false and
+// records it (so the portal auto-opens); every later call for that IP returns true (so we report
+// "online" and iOS keeps the phone joined to the frame).
+bool CWebServer::CaptiveSeenAndMark (const u8 ip[4])
+{
+	for (unsigned i = 0; i < m_nSeen; i++)
+		if (m_Seen[i][0] == ip[0] && m_Seen[i][1] == ip[1]
+		 && m_Seen[i][2] == ip[2] && m_Seen[i][3] == ip[3])
+			return true;
+	unsigned slot = m_SeenNext % 8;
+	m_Seen[slot][0] = ip[0]; m_Seen[slot][1] = ip[1];
+	m_Seen[slot][2] = ip[2]; m_Seen[slot][3] = ip[3];
+	m_SeenNext++;
+	if (m_nSeen < 8) m_nSeen++;
+	return false;
 }
 
 CWebServer::~CWebServer (void)
@@ -259,7 +277,7 @@ void CWebServer::SaveJpg (CSocket *pConn, const char *pQuery, const u8 *pBody, u
 	sendAll (pConn, (const u8 *) ok, sizeof ok - 1);
 }
 
-void CWebServer::Handle (CSocket *pConn)
+void CWebServer::Handle (CSocket *pConn, const u8 clientIP[4])
 {
 	// Read the request headers (small) into the front of the buffer.
 	unsigned total = 0;
@@ -297,25 +315,28 @@ void CWebServer::Handle (CSocket *pConn)
 
 	bool isPost = (method[0] == 'P');
 
-	// OS captive-detection probes. Answering each with its vendor's expected "you have internet"
-	// response makes the phone BELIEVE the AP is online, so it STAYS joined to the frame instead of
-	// dropping back to cellular/home Wi-Fi. That is what makes the convert-slide URL QR reach us in
-	// full Safari (the phone must still be on 192.168.1.1's network when it scans). GETs, no body.
-	if (!isPost)
+	// OS captive-detection probes. The FIRST probe from a phone falls through to the settings page,
+	// so the captive assistant AUTO-OPENS it on join. Every LATER probe from that same phone gets
+	// the vendor's "you have internet" reply, so iOS stops treating the AP as no-internet and KEEPS
+	// the phone joined -> the convert-slide URL QR can then reach us in full Safari. GETs, no body.
+	bool probe = !isPost && (pathEq (path, "/generate_204") || pathEq (path, "/gen_204")
+		|| pathEq (path, "/hotspot-detect.html") || pathEq (path, "/library/test/success.html")
+		|| pathEq (path, "/ncsi.txt") || pathEq (path, "/connecttest.txt"));
+	if (probe && CaptiveSeenAndMark (clientIP))
 	{
 		if (pathEq (path, "/generate_204") || pathEq (path, "/gen_204"))
 		{ SendHead (pConn, "204 No Content", "text/plain", 0); return; }        // Android
-		if (pathEq (path, "/hotspot-detect.html") || pathEq (path, "/library/test/success.html"))
-		{ static const char ok[] = "<HTML><HEAD><TITLE>Success</TITLE></HEAD><BODY>Success</BODY></HTML>";
-		  SendHead (pConn, "200 OK", "text/html", sizeof ok - 1);
-		  sendAll (pConn, (const u8 *) ok, sizeof ok - 1); return; }            // iOS / macOS
 		if (pathEq (path, "/ncsi.txt"))
 		{ static const char t[] = "Microsoft NCSI"; SendHead (pConn, "200 OK", "text/plain", sizeof t - 1);
 		  sendAll (pConn, (const u8 *) t, sizeof t - 1); return; }              // Windows
 		if (pathEq (path, "/connecttest.txt"))
 		{ static const char t[] = "Microsoft Connect Test"; SendHead (pConn, "200 OK", "text/plain", sizeof t - 1);
 		  sendAll (pConn, (const u8 *) t, sizeof t - 1); return; }              // Windows
+		static const char ok[] = "<HTML><HEAD><TITLE>Success</TITLE></HEAD><BODY>Success</BODY></HTML>";
+		SendHead (pConn, "200 OK", "text/html", sizeof ok - 1);                 // iOS / macOS
+		sendAll (pConn, (const u8 *) ok, sizeof ok - 1); return;
 	}
+	// (first probe falls through -> settingsPage below, which the captive assistant auto-opens)
 
 	// Read the body (if any) right after the headers.
 	u8 *body = m_pBuf + hdrEnd;
@@ -384,7 +405,9 @@ void CWebServer::Run (void)
 		CSocket *pConn = Listener.Accept (&ForeignIP, &nForeignPort);
 		if (pConn != 0)
 		{
-			Handle (pConn);
+			u8 clientIP[4] = {0, 0, 0, 0};
+			ForeignIP.CopyTo (clientIP);   // remember which phone this is (captive first-vs-later)
+			Handle (pConn, clientIP);
 			delete pConn;   // close (small CSocket object, safe to free)
 		}
 	}
