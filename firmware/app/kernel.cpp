@@ -118,6 +118,11 @@ void CKernel::SetupPlugins (void)
     m_Photo.set_clock (&m_ElapsedMs);          // drives dwell + cross-fade timing
     m_Photo.set_time_us (&CTimer::GetClockTicks);   // microsecond clock for perf logging
 
+    // Wi-Fi-join QR the plugin draws on "needs-convert" (HEIC) slides — same AP as settings.
+    CString QrPayload;
+    QrPayload.Format ("WIFI:S:%s;T:nopass;;", m_Config.GetStr ("ssid", AP_SSID));
+    m_Photo.set_convert_qr ((const char *) QrPayload);
+
     m_Plugins[0] = &m_Photo;
     m_Scheduler.add ({"photo", true, 90, -1, -1});   // slideshow is the only screen
 

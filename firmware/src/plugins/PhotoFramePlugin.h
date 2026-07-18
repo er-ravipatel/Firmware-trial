@@ -23,6 +23,9 @@ public:
     void set_source(IPhotoSource* source) { source_ = source; reset(); }
     void set_clock(const uint32_t* elapsed_ms) { ms_ = elapsed_ms; }
 
+    // Wi-Fi-join QR payload drawn on "needs-convert" slides (set once by the kernel from config).
+    void set_convert_qr(const char* payload);
+
     // Restart the slideshow (e.g. after the photo source changes at runtime).
     void reset();
 
@@ -70,6 +73,11 @@ private:
     // Composite one frame: blurred background + fit photo (Ken Burns) at progress [0,1].
     void render_photo(const DecodedImage& img, const uint8_t* bg, float progress, int variant,
                       uint8_t* dst);
+    // "Needs-convert" placeholder slide: dark background + Wi-Fi-join QR + "scan to convert" text.
+    void render_convert_slide(ICanvas& canvas, const char* filename);
+    void draw_qr(ICanvas& canvas, const char* text, unsigned cx, unsigned cy, unsigned mod);
+    bool index_needs_convert(int idx) const { return source_ && idx >= 0 && source_->needs_convert(unsigned(idx)); }
+    const char* index_name(int idx) const { return (source_ && idx >= 0) ? source_->name(unsigned(idx)) : ""; }
 
     unsigned now() const { return ms_ ? *ms_ : 0; }
     unsigned photo_count() const { return source_ ? source_->count() : 0; }
@@ -108,6 +116,9 @@ private:
     int next_index_ = -1;
     bool preloaded_ = false;     // has the next photo been decoded ahead of time?
     bool bg_posted_ = false;     // core 0: a background decode job is outstanding
+    bool cur_convert_ = false;   // is the current slide a needs-convert placeholder (show QR)?
+    bool next_convert_ = false;
+    char qr_payload_[80] = {0};  // Wi-Fi-join QR string drawn on convert slides
     int cur_variant_ = 0, next_variant_ = 0;
     State state_ = State::Empty;
     unsigned photo_start_ = 0;   // when the current photo first appeared

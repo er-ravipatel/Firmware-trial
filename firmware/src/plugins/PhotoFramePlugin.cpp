@@ -2,6 +2,7 @@
 #include "../display/ICanvas.h"
 #include "../content/test_image.h"   // embedded fallback JPEG
 #include <stdlib.h>
+#include <qrcodegen.h>   // on-device QR (freestanding C); via EXTRAINCLUDE=-I../vendor/qrcodegen
 
 namespace lf {
 
@@ -58,6 +59,8 @@ void PhotoFramePlugin::reset() {
     next_index_ = -1;
     preloaded_ = false;
     bg_posted_ = false;
+    cur_convert_ = false;
+    next_convert_ = false;
     state_ = State::Empty;
     cur_.w = cur_.h = 0;
     next_.w = next_.h = 0;
@@ -243,11 +246,65 @@ void PhotoFramePlugin::intro_load() {
     unsigned n = photo_count();
     index_ = (n > 0) ? 0 : -1;
     cur_variant_ = variant_of(index_ < 0 ? 0 : index_);
-    load(index_, cur_, cur_bg_);
-    render_photo(cur_, cur_bg_, 0.0f, cur_variant_, fbA_);
+    cur_convert_ = index_needs_convert(index_);
+    if (!cur_convert_) {
+        load(index_, cur_, cur_bg_);
+        render_photo(cur_, cur_bg_, 0.0f, cur_variant_, fbA_);
+    } else {
+        // First file is a needs-convert placeholder: dissolve into black, then the loop shows the QR.
+        cur_.w = cur_.h = 0;
+        for (unsigned long i = 0; i < (unsigned long) fw_ * fh_ * 3; ++i) fbA_[i] = 0;
+    }
     state_ = State::Showing;
     preloaded_ = false;
     bg_posted_ = false;
+}
+
+void PhotoFramePlugin::set_convert_qr(const char* payload) {
+    unsigned i = 0;
+    for (; payload && payload[i] && i + 1 < sizeof(qr_payload_); ++i) qr_payload_[i] = payload[i];
+    qr_payload_[i] = '\0';
+}
+
+// Encode `text` as a QR and draw it centered at (cx,cy) via the device-neutral canvas.
+void PhotoFramePlugin::draw_qr(ICanvas& canvas, const char* text, unsigned cx, unsigned cy, unsigned mod) {
+    static const int kMaxVer = 8;
+    uint8_t qr[qrcodegen_BUFFER_LEN_FOR_VERSION(kMaxVer)];
+    uint8_t tmp[qrcodegen_BUFFER_LEN_FOR_VERSION(kMaxVer)];
+    if (!qrcodegen_encodeText(text, tmp, qr, qrcodegen_Ecc_MEDIUM,
+                              qrcodegen_VERSION_MIN, kMaxVer, qrcodegen_Mask_AUTO, true)) {
+        return;
+    }
+    int qn = qrcodegen_getSize(qr);
+    const unsigned quiet = 4;
+    unsigned dim = (unsigned)(qn + 2 * (int)quiet) * mod;
+    unsigned x0 = cx - dim / 2, y0 = cy - dim / 2;
+    canvas.fill_rect(x0, y0, dim, dim, Rgb{255, 255, 255});
+    for (int my = 0; my < qn; ++my)
+        for (int mx = 0; mx < qn; ++mx)
+            if (qrcodegen_getModule(qr, mx, my))
+                canvas.fill_rect(x0 + (quiet + (unsigned)mx) * mod,
+                                 y0 + (quiet + (unsigned)my) * mod, mod, mod, Rgb{0, 0, 0});
+}
+
+// "Needs-convert" placeholder: dark background + Wi-Fi-join QR + "scan to convert" + file name.
+// Non-disruptive — this is just what the slide shows for its dwell, then the slideshow moves on.
+void PhotoFramePlugin::render_convert_slide(ICanvas& canvas, const char* filename) {
+    const unsigned W = canvas.width(), H = canvas.height();
+    canvas.clear(Rgb{22, 16, 34});   // dark plum, matching the brand
+
+    unsigned mod = H / 150; if (mod < 4) mod = 4; if (mod > 7) mod = 7;
+    unsigned qdim = 37 * mod;
+    unsigned qcy = H / 2 - 8;
+    if (qr_payload_[0]) draw_qr(canvas, qr_payload_, W / 2, qcy, mod);
+
+    const char* msg = "Scan to convert this photo";
+    unsigned ml = 0; while (msg[ml]) ml++;
+    canvas.text(W / 2 - ml * 4, qcy + qdim / 2 + 18, msg, Rgb{232, 196, 138});
+    if (filename && filename[0]) {
+        unsigned fl = 0; while (filename[fl]) fl++;
+        canvas.text(W / 2 - fl * 4, qcy + qdim / 2 + 40, filename, Rgb{198, 208, 222});
+    }
 }
 
 void PhotoFramePlugin::render(ICanvas& canvas) {
@@ -261,19 +318,21 @@ void PhotoFramePlugin::render(ICanvas& canvas) {
     if (state_ == State::Empty) {
         index_ = (n > 0) ? 0 : -1;
         cur_variant_ = variant_of(index_ < 0 ? 0 : index_);
-        load(index_, cur_, cur_bg_);   // first photo: inline (worker not needed yet)
+        cur_convert_ = index_needs_convert(index_);
+        if (!cur_convert_) load(index_, cur_, cur_bg_);   // decode only displayable files
         state_ = State::Showing;
         photo_start_ = t;
         preloaded_ = false;
         bg_posted_ = false;
     } else if (state_ == State::Showing) {
-        // Kick off the next photo's decode on the worker core, a third of the way through the
-        // dwell. Core 0 keeps rendering while the worker decodes into next_/next_bg_.
+        // Kick off the next slide a third of the way through the dwell. A needs-convert slide has
+        // nothing to decode — it's a QR placeholder — so mark it ready immediately.
         if (n > 1 && !bg_posted_ && !preloaded_ && t - photo_start_ >= kDwellMs / 3) {
             next_index_ = (index_ + 1) % int(n);
             next_variant_ = variant_of(next_index_);
-            bg_request(next_index_);
-            bg_posted_ = true;
+            next_convert_ = index_needs_convert(next_index_);
+            if (next_convert_) { preloaded_ = true; bg_posted_ = true; }
+            else { bg_request(next_index_); bg_posted_ = true; }
         }
         // Pick up the finished decode.
         if (bg_posted_ && !preloaded_ && bg_poll_done()) {
@@ -281,23 +340,35 @@ void PhotoFramePlugin::render(ICanvas& canvas) {
         }
         // Safety net: if the worker never ran (multicore unavailable) well past the dwell, decode
         // inline so the slideshow still advances. Only when the worker is provably idle (no race).
-        if (n > 1 && bg_posted_ && !preloaded_
+        if (n > 1 && !next_convert_ && bg_posted_ && !preloaded_
             && t - photo_start_ >= kDwellMs + 2500 && !bg_in_flight()) {
             load(next_index_, next_, next_bg_);
             preloaded_ = true;
         }
-        // Begin the fade only once the next photo is ready AND the dwell has elapsed. If it is not
-        // ready yet we simply hold the current photo a little longer — no stutter.
+        // Advance once the next slide is ready AND the dwell elapsed. Cross-fade between photos;
+        // hard-cut when a QR/convert slide is involved (there is no image to blend).
         if (n > 1 && preloaded_ && t - photo_start_ >= kDwellMs) {
             index_ = next_index_;
-            state_ = State::Fading;
-            fade_start_ = t;
+            if (cur_convert_ || next_convert_) {
+                DecodedImage tmpi = cur_; cur_ = next_; next_ = tmpi;
+                uint8_t* tmpb = cur_bg_; cur_bg_ = next_bg_; next_bg_ = tmpb;
+                cur_variant_ = next_variant_;
+                cur_convert_ = next_convert_;
+                state_ = State::Showing;
+                photo_start_ = t;
+                preloaded_ = false;
+                bg_posted_ = false;
+            } else {
+                state_ = State::Fading;
+                fade_start_ = t;
+            }
         }
-    } else {  // Fading
+    } else {  // Fading (photos only — convert slides hard-cut)
         if (t - fade_start_ >= kFadeMs) {
             DecodedImage tmpi = cur_; cur_ = next_; next_ = tmpi;
             uint8_t* tmpb = cur_bg_; cur_bg_ = next_bg_; next_bg_ = tmpb;
             cur_variant_ = next_variant_;
+            cur_convert_ = next_convert_;
             state_ = State::Showing;
             photo_start_ = fade_start_;
             preloaded_ = false;
@@ -306,7 +377,9 @@ void PhotoFramePlugin::render(ICanvas& canvas) {
     }
 
     // --- Draw fullscreen ---
-    if (state_ == State::Fading) {
+    if (cur_convert_ && state_ != State::Fading) {
+        render_convert_slide(canvas, index_name(index_));
+    } else if (state_ == State::Fading) {
         float pOut = (float) (t - photo_start_) / kSpanMs;
         float pIn = (float) (t - fade_start_) / kSpanMs;
         render_photo(cur_, cur_bg_, pOut, cur_variant_, fbA_);

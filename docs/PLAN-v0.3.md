@@ -51,18 +51,26 @@ USB pendrive → Pi reads raw .heic → serves bytes to phone over the hotspot
 The Pi's whole job is: **SoftAP + tiny HTTP/DNS server + FAT read/write + QR on screen.** No image
 codec beyond what stb already gives us. See [ADR-012](DECISIONS.md#adr-012).
 
-### The user experience (Pillar B)
-1. Slideshow running. User plugs in a pendrive that contains HEIC.
-2. Frame scans, finds files it can't display → enters **Conversion mode**: brings up the SoftAP and
-   shows a **full-screen QR + instructions** ("Some photos need converting — scan to fix. No
-   internet needed").
-3. QR encodes the WiFi join (`WIFI:S:LumenFrame;T:WPA;P:…;;`). Phone scans → joins the hotspot; a
-   **captive-portal** redirect auto-opens the page (fallback: the screen also prints the URL).
-4. Page lists the files needing conversion. User taps **Convert**.
-5. Per file: phone fetches the raw HEIC from the Pi → converts+resizes in-browser → uploads the
-   JPEG → Pi writes it to the pendrive.
-6. Frame shows **"Done — N photos ready"**, drops the AP, and resumes the slideshow with the new
-   JPEGs (now permanently on the pendrive → instant next time).
+### The user experience (Pillar B) — REVISED & STREAMLINED (2026-07-19, owner)
+The original "separate Conversion mode + its own QR" is **superseded**. Since the SoftAP + web page +
+config are already live *during the slideshow*, conversion is **inline and non-disruptive**:
+
+1. Slideshow runs normally. The photo source **classifies** each file: displayable (JPEG/PNG/…) vs
+   **needs-convert** (HEIC/WebP/RAW).
+2. When the rotation reaches a needs-convert file it renders a **QR slide** in that slot ("Scan to
+   convert this photo") **instead of stopping** — just a placeholder for its normal dwell, then the
+   slideshow moves on. The AP is already up, so the QR is scannable mid-show.
+3. QR = the same Wi-Fi-join code → phone joins → captive portal opens the web page.
+4. The page shows **all pending unsupported images** (option **B**), the on-screen one first. Each is
+   a card: the browser fetches the raw HEIC from the Pi, **decodes it (libheif-WASM) to show a
+   thumbnail**, with a **Convert** button centered on the image.
+5. Tap Convert → the button is replaced **in place** by a **semi-transparent progress bar + Stop**;
+   the browser resizes + re-encodes → uploads the JPEG → Pi **writes it back** to the pendrive.
+6. **No reboot:** the frame **re-scans** the drive → the file is now a displayable JPEG → next time
+   its slot comes up it shows the **photo instead of the QR**. The image "resolves" into the show.
+
+**Deleted vs the old plan:** the separate Conversion-mode state, the second/dedicated QR, the
+"drop the AP / reboot to resume" steps. Everything rides the existing AP + web + config.
 
 ### Components (new in v0.3)
 | Component | Where | Notes |
