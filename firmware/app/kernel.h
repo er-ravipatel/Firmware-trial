@@ -63,6 +63,11 @@ private:
     // Bring up the SoftAP + DHCP/DNS/HTTP and serve the setup page (blocks, runs the Circle
     // scheduler). Entered on demand (config flag now; HEIC detection later). Does not return.
     void RunPortalMode (void);
+    // Encode pText as a QR and draw it centered at (cx,cy), nModulePx per module, with a white
+    // quiet zone. Returns the drawn side length in px (0 on failure).
+    unsigned DrawQR (const char *pText, unsigned cx, unsigned cy, unsigned nModulePx);
+    // Draw the full portal/conversion screen (title + Wi-Fi-join QR + instructions). No hardware.
+    void DrawPortalScreen (void);
 
     // do not change this order
     CActLED            m_ActLED;

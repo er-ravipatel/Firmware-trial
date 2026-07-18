@@ -9,8 +9,8 @@
 
 CIRCLEHOME = ../vendor/circle
 
-# Our shared, freestanding source modules live under firmware/src; stb under vendor/stb.
-EXTRAINCLUDE = -I ../src -I ../vendor/stb
+# Our shared, freestanding source modules live under firmware/src; stb + qrcodegen under vendor/.
+EXTRAINCLUDE = -I ../src -I ../vendor/stb -I ../vendor/qrcodegen
 
 OBJS = main.o kernel.o \
        ../src/plugins/PhotoFramePlugin.o \
@@ -19,7 +19,9 @@ OBJS = main.o kernel.o \
        ../src/content/stb_image_impl.o \
        ../src/net/dhcpd.o \
        ../src/net/dnsd.o \
-       ../src/net/webserver.o
+       ../src/net/webserver.o \
+       ../src/util/libc_compat.o \
+       ../vendor/qrcodegen/qrcodegen.o
 
 LIBS = $(CIRCLEHOME)/addon/wlan/libwlan.a \
        $(CIRCLEHOME)/addon/fatfs/libfatfs.a \

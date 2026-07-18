@@ -6,6 +6,7 @@
 #include <circle/timer.h>
 #include <circle/string.h>
 #include <circle/font.h>
+#include <qrcodegen.h>   // Nayuki QR encoder (extern "C"); via EXTRAINCLUDE=-I../vendor/qrcodegen
 
 static const char FromKernel[] = "kernel";
 
@@ -319,6 +320,72 @@ void CKernel::RunSplashIntro (void)
     }
 }
 
+// Encode pText as a QR and draw it centered at (cx,cy). Returns the drawn side length in px.
+unsigned CKernel::DrawQR (const char *pText, unsigned cx, unsigned cy, unsigned nModulePx)
+{
+    static const int kMaxVer = 8;   // ample for a short Wi-Fi payload; keeps the stack buffers small
+    u8 qr[qrcodegen_BUFFER_LEN_FOR_VERSION (kMaxVer)];
+    u8 tmp[qrcodegen_BUFFER_LEN_FOR_VERSION (kMaxVer)];
+    if (!qrcodegen_encodeText (pText, tmp, qr, qrcodegen_Ecc_MEDIUM,
+                               qrcodegen_VERSION_MIN, kMaxVer, qrcodegen_Mask_AUTO, true))
+    {
+        return 0;
+    }
+
+    int n = qrcodegen_getSize (qr);
+    const unsigned quiet = 4;                                   // quiet zone (modules)
+    unsigned dim = (unsigned) (n + 2 * (int) quiet) * nModulePx;
+    unsigned x0 = cx - dim / 2;
+    unsigned y0 = cy - dim / 2;
+
+    m_Canvas.fill_rect (x0, y0, dim, dim, lf::Rgb {255, 255, 255});   // white incl. quiet zone
+    for (int my = 0; my < n; my++)
+    {
+        for (int mx = 0; mx < n; mx++)
+        {
+            if (qrcodegen_getModule (qr, mx, my))
+            {
+                m_Canvas.fill_rect (x0 + (quiet + (unsigned) mx) * nModulePx,
+                                    y0 + (quiet + (unsigned) my) * nModulePx,
+                                    nModulePx, nModulePx, lf::Rgb {0, 0, 0});
+            }
+        }
+    }
+    return dim;
+}
+
+// Draw the full portal/conversion screen: title, the Wi-Fi-join QR, and instructions. No hardware
+// touched, so it is also used by the QEMU `qrtest` path.
+void CKernel::DrawPortalScreen (void)
+{
+    const unsigned W = m_Canvas.width ();
+    const unsigned H = m_Canvas.height ();
+
+    m_Canvas.clear (lf::rgb::Navy);
+
+    // Adaptive module size (display-agnostic): QR ≈ 40% of screen height.
+    unsigned nMod = H / 92;
+    if (nMod < 4) nMod = 4;
+    if (nMod > 12) nMod = 12;
+
+    unsigned qcy = H / 2 + 8;
+    unsigned dim = DrawQR ("WIFI:S:" AP_SSID ";T:nopass;;", W / 2, qcy, nMod);
+    if (dim == 0) return;
+    unsigned qtop = qcy - dim / 2;
+    unsigned qbot = qcy + dim / 2;
+
+    m_Graphics.DrawText (W / 2, qtop - 46, COLOR2D (232, 238, 246), "LUMEN FRAME",
+                         C2DGraphics::AlignCenter, Font12x22);
+    m_Graphics.DrawText (W / 2, qtop - 16, COLOR2D (200, 210, 224), "Photo conversion",
+                         C2DGraphics::AlignCenter, Font8x16);
+    m_Graphics.DrawText (W / 2, qbot + 22, COLOR2D (232, 196, 138), "Scan with your phone camera",
+                         C2DGraphics::AlignCenter, Font8x16);
+    m_Graphics.DrawText (W / 2, qbot + 46, COLOR2D (180, 190, 205),
+                         "or join Wi-Fi \"" AP_SSID "\"  (no password)",
+                         C2DGraphics::AlignCenter, Font8x14);
+    m_Canvas.present ();
+}
+
 // Portal mode: bring up the SoftAP + DHCP/DNS/HTTP and serve the setup page. Blocks forever
 // (runs the Circle scheduler so the net tasks get CPU). Entered on demand; the slideshow is not
 // running here, so networking has the machine to itself. Returns only on bring-up failure path.
@@ -349,18 +416,7 @@ void CKernel::RunPortalMode (void)
 
     m_Logger.Write (FromKernel, LogNotice, "Portal up: join Wi-Fi '%s' -> setup page opens", AP_SSID);
 
-    // Instruction screen (the QR code replaces this in a later step).
-    m_Canvas.clear (lf::rgb::Navy);
-    m_Graphics.DrawText (W / 2, H / 2 - 64, COLOR2D (232, 238, 246), "LUMEN FRAME",
-                         C2DGraphics::AlignCenter, Font12x22);
-    m_Graphics.DrawText (W / 2, H / 2 - 24, COLOR2D (200, 210, 224), "Connect your phone to Wi-Fi:",
-                         C2DGraphics::AlignCenter, Font8x16);
-    m_Graphics.DrawText (W / 2, H / 2 + 4, COLOR2D (232, 196, 138), AP_SSID,
-                         C2DGraphics::AlignCenter, Font12x22);
-    m_Graphics.DrawText (W / 2, H / 2 + 48, COLOR2D (200, 210, 224),
-                         "then a page opens to convert your photos",
-                         C2DGraphics::AlignCenter, Font8x14);
-    m_Canvas.present ();
+    DrawPortalScreen ();
 
     // Serve forever. (Reboot-to-resume-slideshow after conversion is added with the real trigger.)
     for (;;) { m_CoopSched.Yield (); }
@@ -386,6 +442,13 @@ TShutdownMode CKernel::Run (void)
     m_Logger.Write (FromKernel, LogNotice,
                     "==== Lumen Frame boot ==== ver=%s SDmount=%d forced=%d log=%d",
                     LUMEN_VERSION, (int) bSDMounted, (int) bForced, (int) bLogOpen);
+
+    // ---- QR render test (QEMU-friendly: draws the portal screen with NO WiFi, then halts). ----
+    if (bSDMounted && ReadConfigFlag ("qrtest", FALSE))
+    {
+        DrawPortalScreen ();
+        for (;;) { CTimer::SimpleMsDelay (1000); }
+    }
 
     // ---- Portal mode (config-gated during bring-up; the HEIC-on-pendrive trigger replaces this
     // flag later). When on, serve the Wi-Fi setup page instead of the slideshow. Does not return. ----
