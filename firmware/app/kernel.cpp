@@ -193,6 +193,19 @@ TShutdownMode CKernel::Run (void)
         {
             m_Plugins[nCur]->update ();
             m_Plugins[nCur]->render (m_Canvas);
+
+            // TEMP color-order test: labeled pure-colour swatches (top-right). The letter says
+            // what the swatch SHOULD be; report what colour you actually see for each.
+            unsigned sx = m_Canvas.width () - 4 * 44 - 12;
+            m_Canvas.fill_rect (sx,        8, 38, 24, lf::rgb::Red);
+            m_Canvas.fill_rect (sx + 44,   8, 38, 24, lf::rgb::Green);
+            m_Canvas.fill_rect (sx + 88,   8, 38, 24, lf::rgb::Blue);
+            m_Canvas.fill_rect (sx + 132,  8, 38, 24, lf::rgb::White);
+            m_Canvas.text (sx + 14,       36, "R", lf::rgb::White);
+            m_Canvas.text (sx + 58,       36, "G", lf::rgb::White);
+            m_Canvas.text (sx + 102,      36, "B", lf::rgb::White);
+            m_Canvas.text (sx + 146,      36, "W", lf::rgb::Yellow);
+
             m_Canvas.present ();
         }
 

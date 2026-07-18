@@ -63,17 +63,17 @@ public:
         }
     }
 
-    // Cross-fade blit: blend two same-size RGB888 buffers (a, b) by alpha (0=all a,
-    // 255=all b) into a w*h area at (x, y). Default per-pixel; backends may override.
+    // Cross-fade blit: blend two same-size RGB888 buffers (a, b) by alpha in [0,256]
+    // (0=all a, 256=all b) into a w*h area at (x, y). Uses a shift (no divide) for speed.
     virtual void blit_rgb_blend(unsigned x, unsigned y, unsigned w, unsigned h,
                                 const uint8_t* a, const uint8_t* b, unsigned alpha) {
-        unsigned ia = 255 - alpha;
+        unsigned ia = 256 - alpha;
         for (unsigned r = 0; r < h; ++r) {
             for (unsigned c = 0; c < w; ++c) {
                 unsigned long i = (static_cast<unsigned long>(r) * w + c) * 3;
-                Rgb px{uint8_t((a[i] * ia + b[i] * alpha) / 255),
-                       uint8_t((a[i + 1] * ia + b[i + 1] * alpha) / 255),
-                       uint8_t((a[i + 2] * ia + b[i + 2] * alpha) / 255)};
+                Rgb px{uint8_t((a[i] * ia + b[i] * alpha) >> 8),
+                       uint8_t((a[i + 1] * ia + b[i + 1] * alpha) >> 8),
+                       uint8_t((a[i + 2] * ia + b[i + 2] * alpha) >> 8)};
                 set_pixel(x + c, y + r, px);
             }
         }

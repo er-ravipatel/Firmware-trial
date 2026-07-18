@@ -36,9 +36,9 @@ public:
     }
 
 private:
-    // The Pi framebuffer defaults to BGR pixel order (Circle assumes RGB and doesn't set the
-    // pixel-order tag), so swap R/B here to display true colors on hardware.
-    static T2DColor conv (lf::Rgb c) { return COLOR2D (c.b, c.g, c.r); }
+    // Real Pi framebuffer is RGB (ARGB8888) — pass colors straight through. (QEMU's fb is BGR,
+    // so colors look swapped in the emulator only; hardware is correct.)
+    static T2DColor conv (lf::Rgb c) { return COLOR2D (c.r, c.g, c.b); }
 
     C2DGraphics &m_Gfx;
 };

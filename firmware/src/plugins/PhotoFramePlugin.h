@@ -46,6 +46,8 @@ private:
     const uint32_t* ms_ = nullptr;
 
     int index_ = -1;
+    int next_index_ = -1;
+    bool preloaded_ = false;     // has the next photo been decoded ahead of time?
     int cur_variant_ = 0, next_variant_ = 0;
     State state_ = State::Empty;
     unsigned photo_start_ = 0;   // when the current photo first appeared
