@@ -21,6 +21,11 @@ _Format loosely follows [Keep a Changelog](https://keepachangelog.com/)._
 - Product & engineering spec (docs/PRD.md) for the Lumen Frame digital photo frame.
 - Filled in Goals, Roadmap, and Decisions (ADR-001..003) from the planning session.
 
+### Added (build)
+- Emulator bring-up: QEMU (raspi3b) + aarch64 toolchain + Circle configured/built. **Spike C1
+  (emulator) PASSED** — Circle boots in QEMU and renders to the framebuffer (headless screendump
+  → PNG). Helpers: tools/run_qemu.sh, tools/qemu_capture_png.sh.
+
 ### Changed
 - **Major pivot:** re-architected from a Linux appliance to a **genuine bare-metal firmware OS
   in C++ on Circle** (no Linux). Rewrote PRD, roadmap, and goals; superseded ADR-001..003 with

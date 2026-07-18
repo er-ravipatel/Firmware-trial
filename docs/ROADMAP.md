@@ -8,7 +8,8 @@ _Architecture: bare-metal C++ firmware on Circle (no Linux)._
 _Emulator-first (ADR-010): prove in QEMU, then confirm on real hardware._
 - [x] Set up **WSL2** + host toolchain (g++/cmake) + host unit-test harness.
 - [x] Install **QEMU** (`raspi3b`) + `aarch64-linux-gnu` cross-toolchain; clone Circle.
-- [ ] **Spike C1 (emulator):** Circle boots in QEMU; framebuffer shows a test image in the window.
+- [x] **Spike C1 (emulator):** Circle boots in QEMU; framebuffer renders (verified via headless
+      screendump → PNG). Loop proven: cross-compile → kernel8.img → QEMU raspi3b → captured image.
 - [ ] **Spike C1 (hardware):** same on the Zero 2 W → Acer panel via TV board (pin 1366×768).
 - [ ] **Spike C2:** read a JPEG from SD (FatFs) + ported libjpeg → display it (QEMU SD image first).
 - [ ] **Spike C5 (hardware only):** A/B kernel swap via Pi `tryboot` + auto-rollback.

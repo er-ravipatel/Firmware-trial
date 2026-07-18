@@ -47,7 +47,8 @@ _Status legend: ⬜ not run · 🟡 partial · ✅ pass · ❌ fail · 🚫 bloc
 
 | ID | Verifies | Scenario | Type | Pass criteria | Status |
 |----|----------|----------|------|----------------|--------|
-| P1-01 | Circle boots + framebuffer on real panel | C1,S9.1 | T | Test image fills 1366×768 correctly on the Acer panel via the TV board | 🚫 |
+| P1-01 | Circle boots + framebuffer on real panel | C1,S9.1 | T | Test image fills 1366×768 correctly on the Acer panel via the TV board | 🟡 emu-pass |
+| P1-01e | Circle boots + framebuffer in QEMU | C1 | T | Sample renders to 640×480 framebuffer, captured via screendump | ✅ |
 | P1-02 | HDMI timing pinned despite bad EDID | S9.1 | H | Board misreports → forced mode/cvt still drives correct resolution | 🚫 |
 | P1-03 | HDMI unplug/replug recovers | S9.2 | H | Pull + reinsert cable → image returns, no reboot | 🚫 |
 | P1-04 | Screen power-cycled independently | S9.3 | H | Wall-switch the display off/on → slideshow still present | 🚫 |
