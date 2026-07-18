@@ -8,6 +8,9 @@ build/
 *.img
 *.bin
 
+# Third-party build deps (cloned locally; formalize as submodules later)
+firmware/vendor/
+
 # Editor / OS
 .vscode/
 .DS_Store

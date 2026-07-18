@@ -5,11 +5,13 @@ _Architecture: bare-metal C++ firmware on Circle (no Linux)._
 
 ## Milestone 0 — Environment & de-risk spikes (do first)
 **Target outcome:** the toolchain works and the scariest bare-metal unknowns are proven.
-- [ ] Set up **WSL2** + `aarch64-none-elf` toolchain; build a stock Circle sample to SD.
-- [ ] **Spike C1:** Circle boots on the Zero 2 W; HDMI framebuffer shows a test image on the
-      Acer panel through the TV board (pin 1366×768 timing).
-- [ ] **Spike C2:** read a JPEG from SD (FatFs) + ported libjpeg → display it.
-- [ ] **Spike C5:** A/B kernel swap via Pi `tryboot` + auto-rollback on a scratch SD.
+_Emulator-first (ADR-010): prove in QEMU, then confirm on real hardware._
+- [x] Set up **WSL2** + host toolchain (g++/cmake) + host unit-test harness.
+- [x] Install **QEMU** (`raspi3b`) + `aarch64-linux-gnu` cross-toolchain; clone Circle.
+- [ ] **Spike C1 (emulator):** Circle boots in QEMU; framebuffer shows a test image in the window.
+- [ ] **Spike C1 (hardware):** same on the Zero 2 W → Acer panel via TV board (pin 1366×768).
+- [ ] **Spike C2:** read a JPEG from SD (FatFs) + ported libjpeg → display it (QEMU SD image first).
+- [ ] **Spike C5 (hardware only):** A/B kernel swap via Pi `tryboot` + auto-rollback.
 
 ## Milestone 1 — MVP: genuine firmware on the wall
 **Target outcome:** boots our OS to a slideshow from local photos; USB import; offline update.

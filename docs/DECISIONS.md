@@ -113,3 +113,19 @@ why, and what we traded away. Append-only; supersede rather than delete._
   (rejected — most modern APIs require TLS).
 - **Consequences:** Moves the mbedTLS port from "later" to a scheduled core milestone (M-plugins).
   Once done, all network plugins become cheap. Adds a meaningful chunk of bare-metal porting work.
+
+## ADR-010 — Emulator-first development with QEMU
+
+- **Date:** 2026-07-18
+- **Status:** accepted
+- **Context:** Hardware is on hand, but flashing an SD card per iteration is slow. We want a fast
+  edit-build-run loop for the display + app + content layers.
+- **Decision:** Develop and test in **QEMU** (`-M raspi3b`, emulating BCM2837 = same SoC family as
+  the Zero 2 W) first; move to real hardware for what QEMU can't model. Circle supports QEMU.
+- **Faithful in emulation:** boot, framebuffer/display, serial, timers, app logic, render engine,
+  content pipeline (SD image), basic net/web UI. **Not faithful:** WiFi (no CYW43 emulation),
+  tryboot/A-B rollback, exact HDMI timing through the TV board, NEON performance.
+- **Consequences:** Fast iteration for most of the firmware without reflashing. Hardware-only
+  items (WiFi, OTA rollback, HDMI timing, perf) are validated on the real Pi in a later pass.
+  Toolchain: `aarch64-linux-gnu-` (distro) for bare metal; fall back to ARM `aarch64-none-elf` if
+  Circle needs it. Run via `tools/run_qemu.sh`.
