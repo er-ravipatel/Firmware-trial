@@ -12,17 +12,17 @@ display: rotating screen plugins (photo, clock, …). Developed **emulator-first
 ## ▶▶ RESUME HERE (next session) — v0.3 "Universal", in progress
 
 **Currently building:** v0.3 (offline "any screen / any image"). Full plan: [PLAN-v0.3.md](PLAN-v0.3.md).
-The whole **networking + onboarding half is DONE and hardware-proven** (SoftAP + DHCP + DNS + HTTP +
-captive portal + on-device QR + a boot settings window). **Pick up at ONE of these two:**
+The whole **networking + onboarding + settings half is DONE and hardware-proven**: SoftAP + DHCP +
+DNS + HTTP + captive portal + on-device QR + boot settings window + a **CConfig system**
+(`firmware/app/Config.{h,cpp}`, loads/saves `lumen.conf`) + **config-driven branding** (name,
+tagline, credits, mode, AP SSID) + a **web settings page** (`firmware/src/net/webserver.cpp` — edit
+those fields, Save → `lumen.conf`, **Restart button reboots the Pi** via `g_restartRequested`).
 
-1. **Settings web page content** — the web server currently serves a placeholder "connected" page
-   (`firmware/src/net/webserver.cpp`). Build the real settings page + apply-on-restart, and route
-   **all on-screen/web text through config** (the [[configurable-branding]] requirement: name,
-   wordmark, tagline, credits, AP SSID — defaults in code → `lumen.conf` → web-editable).
-2. **The conversion flow (core v0.3)** — PLAN phases 2b/2c/3: **HEIC detection** on a pendrive
-   (classify displayable vs needs-conversion) → **Conversion-mode** trigger (replace nothing; it's a
-   new state) → the **libheif-WASM conversion page** (phone converts + resizes) → **FAT write-back**
-   to the pendrive → reboot-to-resume.
+**Pick up here — the last big v0.3 piece, the conversion flow** (PLAN phases 2b/2c/3): **HEIC
+detection** on a pendrive (classify displayable vs needs-conversion) → **Conversion-mode** (a new
+state, like settings mode but for photos) → the **libheif-WASM conversion page** served by the web
+server (phone decodes+resizes HEIC→JPEG) → **FAT write-back** to the pendrive → reboot-to-resume.
+Route any new text through `m_Config` ([[configurable-branding]]).
 
 **Build/deploy (hardware = SDHOST; see BUILD NOTE below):**
 `wsl bash -lc "cd /mnt/c/.../firmware/app && make -j4"` → `Copy-Item ...\app\kernel8.img D:\`.
