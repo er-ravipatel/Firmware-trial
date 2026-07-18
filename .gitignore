@@ -16,6 +16,9 @@ build/
 firmware/vendor/*
 !firmware/vendor/stb/
 
+# Assembled SD-card staging (firmware blobs + photos)
+firmware/sdcard/
+
 # Editor / OS
 .vscode/
 .DS_Store
