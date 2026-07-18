@@ -96,8 +96,8 @@ _Status legend: ⬜ not run · 🟡 partial · ✅ pass · ❌ fail · 🚫 bloc
 
 | ID | Verifies | Phase | Type | Pass criteria | Status |
 |----|----------|-------|------|----------------|--------|
-| V3-01 | **SoftAP bring-up (the gate)** | W1 | H | Phone sees "LumenFrame", joins with passphrase, gets a DHCP lease from the Pi | ⬜ |
-| V3-02 | HTTP page over the AP | W2 | H | Phone browser loads a page served by the Pi over the hotspot | ⬜ |
+| V3-01 | **SoftAP bring-up (the gate)** | W1 | H | Phone sees the AP, joins, gets a DHCP lease from the Pi | ✅ 2026-07-18 (open "TEST" AP; needed SDHOST + a hand-written DHCP server) |
+| V3-02 | HTTP page over the AP | W2 | H | Phone browser loads a page served by the Pi over the hotspot | ✅ 2026-07-18 (http://192.168.1.1 renders the branded page) |
 | V3-03 | FAT **write** to USB | U1 | T+H | Pi `f_write`+`f_sync` a file to the pendrive → intact + visible on a PC | ⬜ |
 | V3-04 | EDID read + adaptive res | D1 | H | Connect a different-resolution HDMI screen → frame fills it; EDID + chosen mode logged | ⬜ |
 | V3-05 | Adaptive-res fallback | 1 | H | Screen with bad/absent EDID → safe fallback (no blank); `lumen.conf` force-pin works | ⬜ |

@@ -174,3 +174,26 @@ it never bites you the same way twice. Promote the durable ones into
   Reuse a spare fullscreen buffer (the plugin's incoming-frame buffer) instead of allocating another
   3 MB. `C2DGraphics::DrawText` supports `AlignCenter` + larger fonts (`Font12x22`) for a title card;
   colours scale by an alpha for fade in/out. (Remember: hardware fb is RGB, QEMU is BGR.)
+
+### v0.3 — WiFi/SoftAP bring-up (2026-07-18)
+
+- **2026-07-18 — `NO_SDHOST` is a QEMU-only setting; on real hardware it breaks WiFi.** Context: the
+  SoftAP spike failed with `wlan: can't find brcmfmac43430-sdio.bin` + `emmc: EnsureDataMode() error
+  sending CMD13`, even though the blob was on the card and the WiFi chip enumerated
+  (`ether4330: chip 43430`). Root cause: on Pi 3 / Zero 2 W the **WiFi SDIO uses the EMMC (Arasan)
+  controller**; our `-DNO_SDHOST` (added so the SD card works in QEMU, which has no SDHOST) forced the
+  **SD card onto EMMC too** → SD and WiFi collide → WLAN can't read its firmware off the SD. Rule:
+  **for any WiFi build on real hardware, use SDHOST for the SD card (drop `NO_SDHOST`)** so the EMMC
+  controller is free for the WiFi SDIO. `CEMMCDevice` is a *unified* SD driver — with `USE_SDHOST`
+  defined it drives the SDHOST controller (logs `sdhost: emmc1: sdhost-bcm2835 loaded`), still
+  registering the FatFs volume as `emmc1`. Consequence: **QEMU can no longer read an SD image** (no
+  SDHOST) → keep `NO_SDHOST` behind a QEMU-only build switch; use the embedded image for QEMU.
+
+- **2026-07-18 — CYW43 firmware loads from `SD:/firmware/` at runtime, not embedded.** Context:
+  Circle's `CWLAN(FIRMWARE_PATH)` reads the brcmfmac blobs from the card. Rule: copy the whole
+  `addon/wlan/firmware/*.{bin,txt,clm_blob}` set to `SD:/firmware/`; the driver auto-selects by
+  detected chip. The **Pi Zero 2 W enumerates as chip 43430** (not 43436s as the model suggests), so
+  `brcmfmac43430-sdio.bin` is the one it actually loads. Fetch the blobs once via the addon Makefile
+  (needs internet); build `libwlan.a` (`make` in `addon/wlan`). SoftAP: `m_WLAN.Initialize()` →
+  `CreateOpenNet(ssid, channel, hidden)` → `CNetSubSystem(...NetDeviceTypeWLAN)`. **Unemulatable —
+  hardware-only.** Spike W1 PASSED on the real Zero 2 W (firmware ready, MAC up, AP visible).

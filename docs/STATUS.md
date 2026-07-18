@@ -37,7 +37,15 @@ The core-1 decode needs `-DARM_ALLOW_MULTI_CORE` in **`vendor/circle/Config.mk`*
 `addon/SDCard`. Because Circle is gitignored, this flag is **not** in the repo — re-apply it after a
 fresh Circle clone or the app won't link (`CMultiCoreSupport` is `#ifdef`-guarded).
 
-## ▶ NEXT: v0.3 "Universal" — planned, see [PLAN-v0.3.md](PLAN-v0.3.md)
+## ▶ IN PROGRESS: v0.3 "Universal" — see [PLAN-v0.3.md](PLAN-v0.3.md)
+**Spikes W1 + W2 PASSED on hardware (2026-07-18):** SoftAP + DHCP + HTTP page served to a phone,
+fully offline (TESTPLAN V3-01/02). The gating risk is retired. Key fixes: **drop `-DNO_SDHOST`**
+(SD card on SDHOST so EMMC is free for WiFi), and a **hand-written DHCP server** (Circle has none) —
+both in `firmware/src/net/` + docs/LEARNINGS.md. **Next:** DNS responder (captive-portal auto-open) →
+port AP+DHCP+HTTP+DNS into the real kernel (QR trigger + Conversion-mode state machine) → libheif-WASM
+conversion page + FAT write-back. Full plan below.
+
+
 Two pillars, **fully offline** (no internet): **(A) display-agnostic** — EDID auto-detect + safe
 fallback so it fills any HDMI screen (ADR-011); **(B) image-agnostic** — a pendrive with HEIC pops
 an on-screen **QR** → phone joins the Pi's **SoftAP** → converts in the **phone browser**
