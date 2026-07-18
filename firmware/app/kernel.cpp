@@ -51,10 +51,10 @@ void CKernel::SetupPlugins (void)
     m_Photo.set_time_us (&CTimer::GetClockTicks);   // microsecond clock for perf logging
 
     m_Plugins[0] = &m_Photo;
-    m_Scheduler.add ({"photo", true, 24, -1, -1});   // slideshow is the star
+    m_Scheduler.add ({"photo", true, 90, -1, -1});   // slideshow is the star (~8 photos)
 
     m_Plugins[1] = &m_Clock;
-    m_Scheduler.add ({"clock", true, 4, -1, -1});     // brief clock interlude
+    m_Scheduler.add ({"clock", true, 5, -1, -1});     // brief clock interlude
 
     m_PluginCount = 2;
 }

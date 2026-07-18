@@ -54,8 +54,8 @@ private:
     unsigned photo_count() const { return source_ ? source_->count() : 0; }
     static int variant_of(int idx) { return idx & 3; }
 
-    static const unsigned kDwellMs = 6000;   // display time per photo (incl. fade-in)
-    static const unsigned kFadeMs = 1000;    // cross-fade duration
+    static const unsigned kDwellMs = 10000;  // display time per photo (longer => slower Ken Burns)
+    static const unsigned kFadeMs = 1400;    // cross-fade duration (gentler dissolve)
     static const unsigned kSpanMs = kDwellMs + kFadeMs;  // total on-screen span (KB timeline)
 
     IPhotoSource* source_ = nullptr;
