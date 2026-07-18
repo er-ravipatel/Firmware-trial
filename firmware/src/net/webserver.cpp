@@ -13,8 +13,11 @@
 #include <circle/string.h>
 #include <fatfs/ff.h>
 
-#define MAX_CONTENT_SIZE	(6 * 1024 * 1024)   // must hold the largest HEIC we serve
-#define MAX_MULTIPART_SIZE	(5 * 1024 * 1024)   // must hold the uploaded JPEG
+// Keep buffers <= 512 KB: Circle's heap LEAKS any freed block larger than that, and CHTTPDaemon
+// allocates+frees these per worker/connection -> serving multi-MB HEIC here OOMs the frame. Big-file
+// serving/upload is being moved to a reused-buffer path; until then /heic + /jpg fail gracefully.
+#define MAX_CONTENT_SIZE	(256 * 1024)
+#define MAX_MULTIPART_SIZE	(256 * 1024)
 
 volatile bool g_restartRequested = false;   // settings page -> reboot (see webserver.h)
 volatile bool g_rescanRequested = false;    // conversion write-back -> kernel re-scans
