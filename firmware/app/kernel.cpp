@@ -13,7 +13,7 @@ static const unsigned kNowMin = 600;
 CKernel::CKernel (void)
 :   m_Timer (&m_Interrupt),
     m_Logger (m_Options.GetLogLevel (), &m_Timer),
-    m_USBHCI (&m_Interrupt, &m_Timer),
+    m_USBHCI (&m_Interrupt, &m_Timer, TRUE),   // TRUE = enable plug-and-play (USB hotplug)
     m_EMMC (&m_Interrupt, &m_Timer, &m_ActLED),
     m_Graphics (m_Options.GetWidth (), m_Options.GetHeight (), FALSE),
     m_Canvas (m_Graphics),
