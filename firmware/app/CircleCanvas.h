@@ -36,7 +36,9 @@ public:
     }
 
 private:
-    static T2DColor conv (lf::Rgb c) { return COLOR2D (c.r, c.g, c.b); }
+    // The Pi framebuffer defaults to BGR pixel order (Circle assumes RGB and doesn't set the
+    // pixel-order tag), so swap R/B here to display true colors on hardware.
+    static T2DColor conv (lf::Rgb c) { return COLOR2D (c.b, c.g, c.r); }
 
     C2DGraphics &m_Gfx;
 };

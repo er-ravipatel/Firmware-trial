@@ -43,18 +43,20 @@ EOF
 # 3. Our firmware.
 cp "$ROOT/firmware/app/kernel8.img" "$OUT/"
 
-# 4. Photos: transcode HEIC/JPG -> resized baseline JPEG onto the card root (scanned as *.jpg).
+# 4. Photos: transcode HEIC/JPG -> resized baseline JPEG into a photos/ subfolder
+#    (the firmware scans photos/ then images/ then the root).
 if [ -n "$PHOTOS" ] && [ -d "$PHOTOS" ]; then
+    mkdir -p "$OUT/photos"
     shopt -s nullglob nocaseglob
     i=1
     for f in "$PHOTOS"/*.heic "$PHOTOS"/*.jpg "$PHOTOS"/*.jpeg; do
-        out="$(printf '%s/%02d.jpg' "$OUT" "$i")"
+        out="$(printf '%s/photos/%02d.jpg' "$OUT" "$i")"
         if convert "$f" -resize '1000x1000>' -quality 85 -interlace none "$out" 2>/dev/null; then
             i=$((i + 1))
         fi
     done
     shopt -u nullglob nocaseglob
-    echo "staged $((i - 1)) photo(s) from $PHOTOS"
+    echo "staged $((i - 1)) photo(s) into photos/ from $PHOTOS"
 fi
 
 echo "== SD staging ready: $OUT =="

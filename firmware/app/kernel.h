@@ -22,6 +22,7 @@
 #include <fatfs/ff.h>
 
 #include "CircleCanvas.h"
+#include "FileLogDevice.h"
 #include "SdPhotoSource.h"
 #include "app/PluginScheduler.h"       // via EXTRAINCLUDE=-I../src
 #include "plugins/PhotoFramePlugin.h"
@@ -47,6 +48,7 @@ private:
     void SetupPlugins (void);
     void Activate (int nIndex);
     void BootMessage (unsigned &nY, const char *pMsg, lf::Rgb Color);
+    unsigned ScanPhotos (const char *pDrive);   // scans photos/ then images/ then root
 
     // do not change this order
     CActLED            m_ActLED;
@@ -64,6 +66,7 @@ private:
     CircleCanvas       m_Canvas;
     FATFS              m_FileSystemSD;
     FATFS              m_FileSystemUSB;
+    CFileLogDevice     m_FileLog;
     CSdPhotoSource     m_PhotoSource;
     u32                m_ElapsedMs;     // before m_Clock (which holds &m_ElapsedMs)
 

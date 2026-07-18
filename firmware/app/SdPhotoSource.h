@@ -24,10 +24,11 @@ public:
         {
             if (!(Info.fattrib & (AM_DIR | AM_HID | AM_SYS)))
             {
-                // Build "SD:/<name>".
+                // Build "<dir>/<name>", inserting a slash if pDir has none.
                 char *dst = m_Paths[m_nCount];
                 unsigned k = 0;
                 for (const char *p = pDir; *p && k < kMaxPath - 1; ++p) dst[k++] = *p;
+                if (k > 0 && dst[k - 1] != '/' && k < kMaxPath - 1) dst[k++] = '/';
                 for (const char *p = Info.fname; *p && k < kMaxPath - 1; ++p) dst[k++] = *p;
                 dst[k] = '\0';
                 m_nCount++;

@@ -9,7 +9,6 @@ static const char FromKernel[] = "kernel";
 
 // Fake time-of-day for scheduling until an RTC/NTP source exists (10:00).
 static const unsigned kNowMin = 600;
-static const unsigned kTickMs = 100;
 
 CKernel::CKernel (void)
 :   m_Timer (&m_Interrupt),
@@ -70,17 +69,47 @@ void CKernel::Activate (int nIndex)
     m_Canvas.present ();
 }
 
+// Scan a drive ("SD:" / "USB:") for photos, preferring a photos/ then images/ subfolder,
+// falling back to the drive root. Returns the number of photos found.
+unsigned CKernel::ScanPhotos (const char *pDrive)
+{
+    static const char *s_Subs[] = {"/photos", "/images", "/"};
+    for (unsigned i = 0; i < 3; i++)
+    {
+        CString Dir;
+        Dir.Format ("%s%s", pDrive, s_Subs[i]);
+        m_PhotoSource.Scan ((const char *) Dir);
+        if (m_PhotoSource.count () > 0)
+        {
+            return m_PhotoSource.count ();
+        }
+    }
+    return 0;
+}
+
 void CKernel::BootMessage (unsigned &nY, const char *pMsg, lf::Rgb Color)
 {
     m_Canvas.text (60, nY, pMsg, Color);
     m_Canvas.present ();
+    m_Logger.Write (FromKernel, LogNotice, "%s", pMsg);   // also to the SD log file
     nY += 26;
-    CTimer::SimpleMsDelay (650);   // deliberately paced so the boot is watchable
+    CTimer::SimpleMsDelay (350);   // paced so the boot is watchable (log captures everything)
 }
 
 TShutdownMode CKernel::Run (void)
 {
     const unsigned W = m_Canvas.width ();
+
+    // ---- Set up SD-card file logging FIRST, and retarget the logger to it, so everything
+    // below (incl. any Circle panic/exception) is captured in SD:/lumenlog.txt with f_sync. ----
+    boolean bSDMounted = (f_mount (&m_FileSystemSD, "SD:", 1) == FR_OK);
+    boolean bLogOpen = bSDMounted && m_FileLog.Open ("SD:/lumenlog.txt");
+    if (bLogOpen)
+    {
+        m_Logger.SetNewTarget (&m_FileLog);
+    }
+    m_Logger.Write (FromKernel, LogNotice,
+                    "==== Lumen Frame boot ==== SDmount=%d log=%d", (int) bSDMounted, (int) bLogOpen);
 
     // ---- Visible boot sequence (bare metal boots in well under a second; this is paced
     // on purpose so the steps are watchable on screen) ----
@@ -99,11 +128,7 @@ TShutdownMode CKernel::Run (void)
     const char *pSource = "embedded fallback";
 
     boolean bUSB = (f_mount (&m_FileSystemUSB, "USB:", 1) == FR_OK);
-    if (bUSB)
-    {
-        m_PhotoSource.Scan ("USB:/");
-    }
-    unsigned nUSB = bUSB ? m_PhotoSource.count () : 0;
+    unsigned nUSB = bUSB ? ScanPhotos ("USB:") : 0;
 
     if (nUSB > 0)
     {
@@ -117,19 +142,17 @@ TShutdownMode CKernel::Run (void)
         BootMessage (nY, bUSB ? "[--]  USB drive present, no photos"
                               : "[--]  USB pendrive: not detected", lf::rgb::Yellow);
 
-        boolean bSD = (f_mount (&m_FileSystemSD, "SD:", 1) == FR_OK);
-        if (bSD)
+        if (bSDMounted)   // already mounted at the top for logging
         {
-            m_PhotoSource.Scan ("SD:/");
-            nPhotos = m_PhotoSource.count ();
+            nPhotos = ScanPhotos ("SD:");
             if (nPhotos > 0)
             {
                 pSource = "SD card";
                 m_Photo.set_source (&m_PhotoSource);
             }
         }
-        BootMessage (nY, bSD ? "[ok]  SD card mounted (FatFs)"
-                             : "[!!]  SD card mount FAILED", bSD ? lf::rgb::Green : lf::rgb::Red);
+        BootMessage (nY, bSDMounted ? "[ok]  SD card mounted (FatFs)"
+                                    : "[!!]  SD card mount FAILED", bSDMounted ? lf::rgb::Green : lf::rgb::Red);
     }
 
     CString PhotoMsg;
@@ -140,18 +163,30 @@ TShutdownMode CKernel::Run (void)
 
     BootMessage (nY, "[ok]  plugins registered: photo, clock", lf::rgb::Green);
     BootMessage (nY, ">>>   starting slideshow ...", lf::rgb::White);
-    CTimer::SimpleMsDelay (1000);
+    CTimer::SimpleMsDelay (600);
 
     SetupPlugins ();
 
+    unsigned nSwitchAtMs = CTimer::GetClockTicks () / 1000;
+    m_ElapsedMs = nSwitchAtMs;
     Activate (m_Scheduler.next (kNowMin));
-    unsigned nSinceSwitchMs = 0;
 
     while (1)
     {
-        CTimer::SimpleMsDelay (kTickMs);
-        m_ElapsedMs += kTickMs;
-        nSinceSwitchMs += kTickMs;
+        // Real elapsed time drives smooth Ken Burns + cross-fade animation (frame-rate
+        // independent), instead of a fixed tick.
+        m_ElapsedMs = CTimer::GetClockTicks () / 1000;
+
+        // USB hotplug: pick up a pendrive inserted after boot and switch to it.
+        if (m_USBHCI.UpdatePlugAndPlay ())
+        {
+            if (f_mount (&m_FileSystemUSB, "USB:", 1) == FR_OK && ScanPhotos ("USB:") > 0)
+            {
+                m_Logger.Write (FromKernel, LogNotice, "USB hotplug: switched to %u photos",
+                                m_PhotoSource.count ());
+                m_Photo.set_source (&m_PhotoSource);
+            }
+        }
 
         int nCur = m_Scheduler.current ();
         if (nCur >= 0 && m_Plugins[nCur]->wants_continuous_redraw ())
@@ -162,14 +197,14 @@ TShutdownMode CKernel::Run (void)
         }
 
         unsigned nDurMs = (nCur >= 0) ? m_Scheduler.at (nCur).duration_s * 1000u : 1000u;
-        if (nSinceSwitchMs >= nDurMs)
+        if (m_ElapsedMs - nSwitchAtMs >= nDurMs)
         {
             if (nCur >= 0)
             {
                 m_Plugins[nCur]->on_deactivate ();
             }
             Activate (m_Scheduler.next (kNowMin));
-            nSinceSwitchMs = 0;
+            nSwitchAtMs = m_ElapsedMs;
         }
     }
 
