@@ -67,8 +67,8 @@ private:
     // Bring up the SoftAP + DHCP/DNS/HTTP and serve the setup page (blocks, runs the Circle
     // scheduler). Debug path (portal=on). Does not return.
     void RunPortalMode (void);
-    // Shown once a phone has joined: serve the settings page forever (until reboot). Does not return.
-    void RunSettingsMode (void);
+    // Poll the settings page's "restart requested" flag and reboot if set (slideshow never pauses).
+    void CheckRestart (void);
     // Encode pText as a QR and draw it centered at (cx,cy), nModulePx per module, with a white
     // quiet zone. Returns the drawn side length in px (0 on failure).
     unsigned DrawQR (const char *pText, unsigned cx, unsigned cy, unsigned nModulePx);

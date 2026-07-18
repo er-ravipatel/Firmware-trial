@@ -321,7 +321,7 @@ void CKernel::RunSplashIntro (void)
     unsigned nLastRemain = 0;
     for (;;)
     {
-        if (m_bNetUp && g_dhcpClientConnected) { RunSettingsMode (); }   // does not return
+        if (m_bNetUp) CheckRestart ();   // web page may request a reboot; slideshow never pauses
         unsigned e = CTimer::GetClockTicks () / 1000 - nWinStart;
         if (e >= 10000) break;
         unsigned nRemain = (10000 - e + 999) / 1000;
@@ -474,35 +474,16 @@ void CKernel::DrawSplashWithQR (const u8 *pGrad, boolean bNet, unsigned nSeconds
 
 // Once a phone has joined the AP: show a "connected" screen and serve the settings page forever
 // (the render loop is paused; the user applies settings and restarts to resume the slideshow).
-void CKernel::RunSettingsMode (void)
+// Poll the "restart requested" flag from the settings web page. Connecting a phone NEVER takes
+// over the screen — the slideshow keeps running (the web server is served via per-frame yield).
+// Only an explicit Restart tap reboots (after flushing the reply so the phone sees the response).
+void CKernel::CheckRestart (void)
 {
-    const unsigned W = m_Canvas.width ();
-    const unsigned H = m_Canvas.height ();
-
-    m_Logger.Write (FromKernel, LogNotice, "Phone connected -> settings mode");
-    m_Canvas.clear (lf::rgb::Navy);
-    m_Graphics.DrawText (W / 2, H / 2 - 34, COLOR2D (232, 238, 246),
-                         m_Config.GetStr ("name", "LUMEN FRAME"), C2DGraphics::AlignCenter, Font12x22);
-    m_Graphics.DrawText (W / 2, H / 2 + 4, COLOR2D (127, 227, 192), "Phone connected",
-                         C2DGraphics::AlignCenter, Font8x16);
-    m_Graphics.DrawText (W / 2, H / 2 + 32, COLOR2D (200, 210, 224),
-                         "Configure the frame on your phone", C2DGraphics::AlignCenter, Font8x14);
-    m_Graphics.DrawText (W / 2, H / 2 + 56, COLOR2D (180, 190, 205),
-                         "Save, then tap Restart to apply", C2DGraphics::AlignCenter, Font8x14);
-    m_Canvas.present ();
-
-    // Serve the settings page until the phone requests a restart; then reboot.
-    for (;;)
-    {
-        m_CoopSched.Yield ();
-        if (g_restartRequested)
-        {
-            m_Logger.Write (FromKernel, LogNotice, "restart requested from settings page -> reboot");
-            unsigned t0 = CTimer::GetClockTicks () / 1000;
-            while (CTimer::GetClockTicks () / 1000 - t0 < 1500) m_CoopSched.Yield ();   // flush reply
-            reboot ();
-        }
-    }
+    if (!g_restartRequested) return;
+    m_Logger.Write (FromKernel, LogNotice, "restart requested from web page -> reboot");
+    unsigned t0 = CTimer::GetClockTicks () / 1000;
+    while (CTimer::GetClockTicks () / 1000 - t0 < 1500) m_CoopSched.Yield ();   // flush the reply
+    reboot ();
 }
 
 // Portal mode: bring up the SoftAP + DHCP/DNS/HTTP and serve the setup page. Blocks forever
@@ -625,12 +606,12 @@ TShutdownMode CKernel::Run (void)
         // independent), instead of a fixed tick.
         m_ElapsedMs = CTimer::GetClockTicks () / 1000;
 
-        // Keep the SoftAP responsive during the slideshow (cheap when idle). If a phone joins,
-        // hand off to settings mode (pauses the slideshow until the frame is restarted).
+        // Keep the SoftAP + web page responsive during the slideshow (cheap when idle). Connecting
+        // a phone does NOT pause the show — the user configures/converts while it keeps running.
         if (m_bNetUp)
         {
             m_CoopSched.Yield ();
-            if (g_dhcpClientConnected) { RunSettingsMode (); }
+            CheckRestart ();
         }
 
         // USB hotplug: switch to a pendrive when inserted; fall back to the SD when removed.
