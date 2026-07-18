@@ -103,7 +103,7 @@ _Status legend: ⬜ not run · 🟡 partial · ✅ pass · ❌ fail · 🚫 bloc
 | V3-05 | Adaptive-res fallback | 1 | H | Screen with bad/absent EDID → safe fallback (no blank); `lumen.conf` force-pin works | ⬜ |
 | V3-06 | On-device PNG/GIF/BMP | 2 | U+T | PNG/GIF/BMP dropped on the card display directly | ⬜ |
 | V3-07 | Needs-conversion classifier | 2 | U | Scan of a mixed folder correctly lists exactly the HEIC/WebP/RAW/oversized files | ⬜ |
-| V3-08 | QR + captive-portal onboarding | 3 | H | Plug HEIC pendrive → full-screen QR + instructions → phone joins → page auto-opens (URL fallback shown) | ⬜ |
+| V3-08 | QR + captive-portal onboarding | 3 | H | Plug HEIC pendrive → full-screen QR + instructions → phone joins → page auto-opens (URL fallback shown) | 🟡 captive-portal auto-open CONFIRMED (Android + iOS) via DNS responder; QR + HEIC trigger pending kernel integration |
 | V3-09 | Phone-side convert + write-back | 4 | H | Real iPhone HEIC → browser converts (libheif-WASM) → JPEG written to pendrive → displays | ⬜ |
 | V3-10 | Pi never decodes HEIC | 4 | U+T | Conversion path: Pi only reads/serves/writes bytes; no image codec invoked on HEIC | ⬜ |
 | V3-11 | Pull-during-write safety | 5 | H | Remove pendrive mid-write → at most the in-flight file missing; existing files intact (temp+rename) | ⬜ |

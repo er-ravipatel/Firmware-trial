@@ -8,6 +8,8 @@ served to a phone, all with no internet.
   joins the AP. RFC-2131-checked; broadcast reply; MAC-stable lease; diagnostic logging.
 - **webserver.{h,cpp}** — `CHTTPDaemon` subclass serving a self-contained branded page on any path
   (so captive-portal probes reach it). Grows into the photo-conversion page.
+- **dnsd.{h,cpp}** — minimal DNS responder: answers every A query with the AP IP → the phone's
+  connectivity check resolves to us and the page **auto-opens** (confirmed on Android + iOS).
 
 **Build note:** WiFi requires the SDHOST build (SD card on SDHOST, EMMC free for WiFi SDIO) — i.e.
 **drop `-DNO_SDHOST`** in `vendor/circle/Config.mk` (see docs/LEARNINGS.md). CYW43 firmware blobs go

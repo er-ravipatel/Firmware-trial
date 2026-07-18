@@ -38,12 +38,14 @@ The core-1 decode needs `-DARM_ALLOW_MULTI_CORE` in **`vendor/circle/Config.mk`*
 fresh Circle clone or the app won't link (`CMultiCoreSupport` is `#ifdef`-guarded).
 
 ## ▶ IN PROGRESS: v0.3 "Universal" — see [PLAN-v0.3.md](PLAN-v0.3.md)
-**Spikes W1 + W2 PASSED on hardware (2026-07-18):** SoftAP + DHCP + HTTP page served to a phone,
-fully offline (TESTPLAN V3-01/02). The gating risk is retired. Key fixes: **drop `-DNO_SDHOST`**
-(SD card on SDHOST so EMMC is free for WiFi), and a **hand-written DHCP server** (Circle has none) —
-both in `firmware/src/net/` + docs/LEARNINGS.md. **Next:** DNS responder (captive-portal auto-open) →
-port AP+DHCP+HTTP+DNS into the real kernel (QR trigger + Conversion-mode state machine) → libheif-WASM
-conversion page + FAT write-back. Full plan below.
+**Spikes W1 + W2 + captive portal PASSED on hardware (2026-07-18):** bare-metal **SoftAP + DHCP +
+DNS + HTTP**, and the setup page **auto-opens on both Android and iOS** — fully offline (TESTPLAN
+V3-01/02, V3-08 partial). The gating risk is retired. Key fixes: **drop `-DNO_SDHOST`** (SD card on
+SDHOST so EMMC is free for WiFi), a **hand-written DHCP server** and a **DNS responder** (Circle has
+neither) — all validated code in `firmware/src/net/` (dhcpd, dnsd, webserver) + docs/LEARNINGS.md.
+**Next:** port AP+DHCP+DNS+HTTP into the real Lumen Frame kernel with the **QR trigger** (detect HEIC
+on a pendrive → show QR + start AP) and a **Conversion-mode state machine**, then the **libheif-WASM
+conversion page + FAT write-back** to the pendrive. Full plan below.
 
 
 Two pillars, **fully offline** (no internet): **(A) display-agnostic** — EDID auto-detect + safe
