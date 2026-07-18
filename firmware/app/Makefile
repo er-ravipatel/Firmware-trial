@@ -10,7 +10,8 @@
 CIRCLEHOME = ../vendor/circle
 
 # Our shared, freestanding source modules live under firmware/src; stb + qrcodegen under vendor/.
-EXTRAINCLUDE = -I ../src -I ../vendor/stb -I ../vendor/qrcodegen
+# -I ../app lets shared modules (e.g. the web server) reach app-layer headers like Config.h.
+EXTRAINCLUDE = -I ../src -I ../vendor/stb -I ../vendor/qrcodegen -I ../app
 
 OBJS = main.o kernel.o Config.o \
        ../src/plugins/PhotoFramePlugin.o \

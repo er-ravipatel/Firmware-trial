@@ -421,7 +421,7 @@ boolean CKernel::BringUpNetwork (void)
     }
     new CDHCPD (&m_Net, s_APIP);
     new CDNSD (&m_Net, s_APIP);
-    new CWebServer (&m_Net);
+    new CWebServer (&m_Net, &m_Config);
     m_Logger.Write (FromKernel, LogNotice, "SoftAP '%s' up - settings reachable", pSsid);
     return TRUE;
 }
@@ -515,7 +515,7 @@ void CKernel::RunPortalMode (void)
     // Net services, as cooperative-scheduler tasks.
     new CDHCPD (&m_Net, s_APIP);
     new CDNSD (&m_Net, s_APIP);
-    new CWebServer (&m_Net);
+    new CWebServer (&m_Net, &m_Config);
 
     m_Logger.Write (FromKernel, LogNotice, "Portal up: join Wi-Fi '%s' -> setup page opens", pSsid);
 
