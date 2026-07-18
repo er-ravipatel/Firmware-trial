@@ -16,10 +16,16 @@ OBJS = main.o kernel.o \
        ../src/plugins/PhotoFramePlugin.o \
        ../src/content/JpegDecoder.o \
        ../src/content/ExifReader.o \
-       ../src/content/stb_image_impl.o
+       ../src/content/stb_image_impl.o \
+       ../src/net/dhcpd.o \
+       ../src/net/dnsd.o \
+       ../src/net/webserver.o
 
-LIBS = $(CIRCLEHOME)/addon/fatfs/libfatfs.a \
+LIBS = $(CIRCLEHOME)/addon/wlan/libwlan.a \
+       $(CIRCLEHOME)/addon/fatfs/libfatfs.a \
        $(CIRCLEHOME)/addon/SDCard/libsdcard.a \
+       $(CIRCLEHOME)/lib/net/libnet.a \
+       $(CIRCLEHOME)/lib/sched/libsched.a \
        $(CIRCLEHOME)/lib/usb/libusb.a \
        $(CIRCLEHOME)/lib/input/libinput.a \
        $(CIRCLEHOME)/lib/fs/libfs.a \

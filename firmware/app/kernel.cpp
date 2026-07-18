@@ -12,6 +12,13 @@ static const char FromKernel[] = "kernel";
 // Fake time-of-day for scheduling until an RTC/NTP source exists (10:00).
 static const unsigned kNowMin = 600;
 
+// SoftAP (portal mode) config. CYW43 firmware blobs must be on the card at this path.
+#define FIRMWARE_PATH  "SD:/firmware/"
+#define AP_SSID        "LumenFrame"
+#define AP_CHANNEL     6
+static const u8 s_APIP[]   = {192, 168, 1, 1};
+static const u8 s_APMask[] = {255, 255, 255, 0};
+
 // --- Tiny config-file helpers (freestanding: no libc strcmp/tolower) ---
 static inline char lc (char c) { return (c >= 'A' && c <= 'Z') ? (char) (c + 32) : c; }
 
@@ -66,6 +73,8 @@ CKernel::CKernel (void)
     m_EMMC (&m_Interrupt, &m_Timer, &m_ActLED),
     m_Graphics (m_Options.GetWidth (), m_Options.GetHeight (), FALSE),
     m_Canvas (m_Graphics),
+    m_WLAN (FIRMWARE_PATH),
+    m_Net (s_APIP, s_APMask, 0, 0, "lumen", NetDeviceTypeWLAN),
     m_ElapsedMs (0),
     m_DecodeCore (&m_Photo, CMemorySystem::Get ()),   // core-1 background decoder
     m_PluginCount (0)
@@ -310,6 +319,53 @@ void CKernel::RunSplashIntro (void)
     }
 }
 
+// Portal mode: bring up the SoftAP + DHCP/DNS/HTTP and serve the setup page. Blocks forever
+// (runs the Circle scheduler so the net tasks get CPU). Entered on demand; the slideshow is not
+// running here, so networking has the machine to itself. Returns only on bring-up failure path.
+void CKernel::RunPortalMode (void)
+{
+    const unsigned W = m_Canvas.width ();
+    const unsigned H = m_Canvas.height ();
+
+    m_Logger.Write (FromKernel, LogNotice, "Portal mode: starting SoftAP '%s'", AP_SSID);
+
+    boolean bOK = m_WLAN.Initialize ();
+    if (bOK) bOK = m_WLAN.CreateOpenNet (AP_SSID, AP_CHANNEL, FALSE);
+    if (bOK) bOK = m_Net.Initialize ();
+    if (!bOK)
+    {
+        m_Logger.Write (FromKernel, LogError, "Portal: WLAN/net bring-up FAILED");
+        m_Canvas.clear (lf::rgb::Navy);
+        m_Graphics.DrawText (W / 2, H / 2, COLOR2D (240, 120, 120), "Wi-Fi setup failed - see log",
+                             C2DGraphics::AlignCenter, Font8x16);
+        m_Canvas.present ();
+        for (;;) { m_CoopSched.Yield (); }
+    }
+
+    // Net services, as cooperative-scheduler tasks.
+    new CDHCPD (&m_Net, s_APIP);
+    new CDNSD (&m_Net, s_APIP);
+    new CWebServer (&m_Net);
+
+    m_Logger.Write (FromKernel, LogNotice, "Portal up: join Wi-Fi '%s' -> setup page opens", AP_SSID);
+
+    // Instruction screen (the QR code replaces this in a later step).
+    m_Canvas.clear (lf::rgb::Navy);
+    m_Graphics.DrawText (W / 2, H / 2 - 64, COLOR2D (232, 238, 246), "LUMEN FRAME",
+                         C2DGraphics::AlignCenter, Font12x22);
+    m_Graphics.DrawText (W / 2, H / 2 - 24, COLOR2D (200, 210, 224), "Connect your phone to Wi-Fi:",
+                         C2DGraphics::AlignCenter, Font8x16);
+    m_Graphics.DrawText (W / 2, H / 2 + 4, COLOR2D (232, 196, 138), AP_SSID,
+                         C2DGraphics::AlignCenter, Font12x22);
+    m_Graphics.DrawText (W / 2, H / 2 + 48, COLOR2D (200, 210, 224),
+                         "then a page opens to convert your photos",
+                         C2DGraphics::AlignCenter, Font8x14);
+    m_Canvas.present ();
+
+    // Serve forever. (Reboot-to-resume-slideshow after conversion is added with the real trigger.)
+    for (;;) { m_CoopSched.Yield (); }
+}
+
 TShutdownMode CKernel::Run (void)
 {
     const unsigned W = m_Canvas.width ();
@@ -330,6 +386,13 @@ TShutdownMode CKernel::Run (void)
     m_Logger.Write (FromKernel, LogNotice,
                     "==== Lumen Frame boot ==== ver=%s SDmount=%d forced=%d log=%d",
                     LUMEN_VERSION, (int) bSDMounted, (int) bForced, (int) bLogOpen);
+
+    // ---- Portal mode (config-gated during bring-up; the HEIC-on-pendrive trigger replaces this
+    // flag later). When on, serve the Wi-Fi setup page instead of the slideshow. Does not return. ----
+    if (bSDMounted && ReadConfigFlag ("portal", FALSE))
+    {
+        RunPortalMode ();
+    }
 
     // ---- Detect the photo source silently (steps go to the SD log, not the screen — the
     // splash covers boot). Prefer a USB pendrive; fall back to the SD card; then embedded. ----

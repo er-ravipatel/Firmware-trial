@@ -43,9 +43,13 @@ DNS + HTTP**, and the setup page **auto-opens on both Android and iOS** — full
 V3-01/02, V3-08 partial). The gating risk is retired. Key fixes: **drop `-DNO_SDHOST`** (SD card on
 SDHOST so EMMC is free for WiFi), a **hand-written DHCP server** and a **DNS responder** (Circle has
 neither) — all validated code in `firmware/src/net/` (dhcpd, dnsd, webserver) + docs/LEARNINGS.md.
-**Next:** port AP+DHCP+DNS+HTTP into the real Lumen Frame kernel with the **QR trigger** (detect HEIC
-on a pendrive → show QR + start AP) and a **Conversion-mode state machine**, then the **libheif-WASM
-conversion page + FAT write-back** to the pendrive. Full plan below.
+**Step 1c DONE (2026-07-18):** the whole net stack (SoftAP + DHCP + DNS + HTTP + captive portal) is
+now **integrated into the real kernel** (`RunPortalMode()`), gated by `portal = on` in `lumen.conf`.
+Verified on hardware: normal slideshow mode unchanged (net members inert), and portal mode brings up
+the AP + serves the setup page from our kernel. Needs SDHOST build (WiFi libs: `libwlan/libnet/
+libsched`; net modules in `firmware/src/net/`). **Next:** (2) on-device **QR encoder** + **HEIC-
+detection trigger** (replace the `portal` flag) + **Conversion-mode** state machine; (3) **libheif-
+WASM conversion page + FAT write-back** to the pendrive, then reboot-to-resume. Full plan below.
 
 
 Two pillars, **fully offline** (no internet): **(A) display-agnostic** — EDID auto-detect + safe
