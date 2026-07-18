@@ -12,8 +12,9 @@ build/
 *.d
 *.hex
 
-# Third-party build deps (cloned locally; formalize as submodules later)
-firmware/vendor/
+# Third-party build deps: Circle is cloned locally (huge); stb is a vendored single header.
+firmware/vendor/*
+!firmware/vendor/stb/
 
 # Editor / OS
 .vscode/

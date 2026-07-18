@@ -9,12 +9,14 @@
 
 CIRCLEHOME = ../vendor/circle
 
-# Our shared, freestanding source modules live under firmware/src.
-EXTRAINCLUDE = -I ../src
+# Our shared, freestanding source modules live under firmware/src; stb under vendor/stb.
+EXTRAINCLUDE = -I ../src -I ../vendor/stb
 
 OBJS = main.o kernel.o \
        ../src/plugins/PhotoFramePlugin.o \
-       ../src/plugins/ClockPlugin.o
+       ../src/plugins/ClockPlugin.o \
+       ../src/content/JpegDecoder.o \
+       ../src/content/stb_image_impl.o
 
 LIBS = $(CIRCLEHOME)/lib/libcircle.a
 

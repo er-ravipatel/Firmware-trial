@@ -37,6 +37,17 @@ public:
     // Text with the top-left at pixel (x, y), default font, transparent background.
     virtual void text(unsigned x, unsigned y, const char* s, Rgb c) = 0;
 
+    // Blit an RGB888 buffer (w*h*3, top-down) with its top-left at (x, y). Default
+    // implementation is per-pixel; backends may override for speed.
+    virtual void blit_rgb(unsigned x, unsigned y, unsigned w, unsigned h, const uint8_t* rgb) {
+        for (unsigned row = 0; row < h; ++row) {
+            for (unsigned col = 0; col < w; ++col) {
+                const uint8_t* p = rgb + (static_cast<unsigned long>(row) * w + col) * 3;
+                set_pixel(x + col, y + row, Rgb{p[0], p[1], p[2]});
+            }
+        }
+    }
+
     // Flush the back buffer to the display (double-buffered backends). Default: no-op.
     virtual void present() {}
 };

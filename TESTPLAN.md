@@ -52,7 +52,8 @@ _Status legend: ⬜ not run · 🟡 partial · ✅ pass · ❌ fail · 🚫 bloc
 | P1-02 | HDMI timing pinned despite bad EDID | S9.1 | H | Board misreports → forced mode/cvt still drives correct resolution | 🚫 |
 | P1-03 | HDMI unplug/replug recovers | S9.2 | H | Pull + reinsert cable → image returns, no reboot | 🚫 |
 | P1-04 | Screen power-cycled independently | S9.3 | H | Wall-switch the display off/on → slideshow still present | 🚫 |
-| P1-05 | JPEG from SD decodes + displays | C2,S2.1 | T | libjpeg-turbo decodes a known JPEG from FatFs and shows it | 🚫 |
+| P1-05 | JPEG from SD decodes + displays | C2,S2.1 | T | decode a known JPEG from FatFs and show it | 🚫 |
+| P1-05e | JPEG decode (embedded) + display | C2 | T | stb_image decodes an embedded baseline JPEG, blitted to framebuffer | ✅ |
 | P1-06 | PNG/WebP decode | S3,S5 | U+T | Known PNG + WebP decode to correct pixels | ⬜ |
 | P1-07 | EXIF orientation applied | S2.1 | U+T | All 8 EXIF orientations render upright | ⬜ |
 | P1-08 | Fit/letterbox correct | S2.1 | T | Portrait + landscape fit within frame, aspect preserved | 🚫 |

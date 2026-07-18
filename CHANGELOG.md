@@ -34,6 +34,9 @@ _Format loosely follows [Keep a Changelog](https://keepachangelog.com/)._
   and live clock cycling every 2s. The tested host logic now drives real rendered frames.
 - Made the shared logic modules truly freestanding (C headers, no std::) so the same code
   compiles for host unit tests and the bare-metal (-nostdinc++, -fno-exceptions) firmware.
+- **Real JPEG decode on bare metal (Spike C2 decode):** vendored stb_image, building under
+  Circle's flags; JpegDecoder wrapper; ICanvas.blit_rgb. PhotoFrame plugin now decodes and
+  displays an embedded baseline JPEG in QEMU. tools/gen_test_asset.sh generates the test image.
 
 ### Changed
 - **Major pivot:** re-architected from a Linux appliance to a **genuine bare-metal firmware OS
