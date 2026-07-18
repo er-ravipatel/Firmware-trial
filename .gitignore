@@ -7,6 +7,10 @@ build/
 *.elf
 *.img
 *.bin
+*.lst
+*.map
+*.d
+*.hex
 
 # Third-party build deps (cloned locally; formalize as submodules later)
 firmware/vendor/

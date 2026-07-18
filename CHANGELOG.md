@@ -25,6 +25,9 @@ _Format loosely follows [Keep a Changelog](https://keepachangelog.com/)._
 - Emulator bring-up: QEMU (raspi3b) + aarch64 toolchain + Circle configured/built. **Spike C1
   (emulator) PASSED** — Circle boots in QEMU and renders to the framebuffer (headless screendump
   → PNG). Helpers: tools/run_qemu.sh, tools/qemu_capture_png.sh.
+- **Our first firmware app** (firmware/app/): a Circle CKernel that boots and draws the Lumen
+  Frame boot splash (border, accent bar, dynamic resolution text, color swatches). Verified
+  rendering in QEMU — *our* code booting, not Circle's sample.
 
 ### Changed
 - **Major pivot:** re-architected from a Linux appliance to a **genuine bare-metal firmware OS
