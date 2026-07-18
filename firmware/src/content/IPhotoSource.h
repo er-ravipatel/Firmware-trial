@@ -22,6 +22,10 @@ public:
 
     // File name (no path) of `index`, for the QR slide / conversion web page. "" if unavailable.
     virtual const char* name(unsigned index) const { (void) index; return ""; }
+
+    // Full drive path of `index` (e.g. "SD:/photos/x.heic"), so the web server can read/write it
+    // directly without going through the shared jpeg() buffer. "" if unavailable.
+    virtual const char* path(unsigned index) const { (void) index; return ""; }
 };
 
 }  // namespace lf

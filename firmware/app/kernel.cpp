@@ -427,7 +427,7 @@ boolean CKernel::BringUpNetwork (void)
     }
     new CDHCPD (&m_Net, s_APIP);
     new CDNSD (&m_Net, s_APIP);
-    new CWebServer (&m_Net, &m_Config);
+    new CWebServer (&m_Net, &m_Config, &m_PhotoSource);
     m_Logger.Write (FromKernel, LogNotice, "SoftAP '%s' up - settings reachable", pSsid);
     return TRUE;
 }
@@ -513,7 +513,7 @@ void CKernel::RunPortalMode (void)
     // Net services, as cooperative-scheduler tasks.
     new CDHCPD (&m_Net, s_APIP);
     new CDNSD (&m_Net, s_APIP);
-    new CWebServer (&m_Net, &m_Config);
+    new CWebServer (&m_Net, &m_Config, &m_PhotoSource);
 
     m_Logger.Write (FromKernel, LogNotice, "Portal up: join Wi-Fi '%s' -> setup page opens", pSsid);
 
@@ -612,6 +612,17 @@ TShutdownMode CKernel::Run (void)
         {
             m_CoopSched.Yield ();
             CheckRestart ();
+
+            // A conversion wrote a new JPEG back — re-scan so the photo resolves into the slideshow
+            // and the HEIC's QR slide disappears (no reboot). Drain the decoder first to avoid a
+            // FatFs race with core 1.
+            if (g_rescanRequested)
+            {
+                g_rescanRequested = false;
+                m_Photo.drain_decode ();
+                unsigned nNow = ScanPhotos (bUsingUSB ? "USB:" : "SD:");
+                m_Logger.Write (FromKernel, LogNotice, "rescan after convert: %u photos", nNow);
+            }
         }
 
         // USB hotplug: switch to a pendrive when inserted; fall back to the SD when removed.

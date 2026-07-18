@@ -26,6 +26,10 @@ public:
     // Wi-Fi-join QR payload drawn on "needs-convert" slides (set once by the kernel from config).
     void set_convert_qr(const char* payload);
 
+    // Wait for the background decoder (core 1) to go idle — call before re-scanning the source
+    // from core 0 (e.g. after a conversion writes a new file), so the two don't race on FatFs.
+    void drain_decode() { bg_drain(); }
+
     // Restart the slideshow (e.g. after the photo source changes at runtime).
     void reset();
 

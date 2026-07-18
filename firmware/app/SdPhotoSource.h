@@ -41,6 +41,7 @@ public:
             Result = f_findnext (&Dir, &Info);
         }
         f_closedir (&Dir);
+        DedupConverted ();   // hide any HEIC whose converted .jpg twin is now present
     }
 
     unsigned count (void) const override { return m_nCount; }
@@ -56,7 +57,7 @@ public:
     }
 
     // Full drive path of a file (for serving/writing back over the web). "" if out of range.
-    const char *path (unsigned nIndex) const
+    const char *path (unsigned nIndex) const override
     {
         return nIndex < m_nCount ? m_Paths[nIndex] : "";
     }
@@ -120,6 +121,54 @@ private:
             a++; b++;
         }
         return *a == '\0' && *b == '\0';
+    }
+
+    // Length of a filename up to (not including) its last '.'.
+    static unsigned BaseLen (const char *pName)
+    {
+        unsigned len = 0, dot = 0;
+        for (const char *p = pName; *p; ++p) { if (*p == '.') dot = len; len++; }
+        return dot ? dot : len;
+    }
+
+    // Do two entries share the same base name (case-insensitive, ignoring extension)?
+    bool SameBase (unsigned a, unsigned b) const
+    {
+        const char *na = &m_Paths[a][m_NameOff[a]];
+        const char *nb = &m_Paths[b][m_NameOff[b]];
+        unsigned la = BaseLen (na), lb = BaseLen (nb);
+        if (la != lb) return false;
+        for (unsigned i = 0; i < la; ++i)
+        {
+            char ca = (na[i] >= 'A' && na[i] <= 'Z') ? (char) (na[i] + 32) : na[i];
+            char cb = (nb[i] >= 'A' && nb[i] <= 'Z') ? (char) (nb[i] + 32) : nb[i];
+            if (ca != cb) return false;
+        }
+        return true;
+    }
+
+    // Drop any needs-convert file (kind 1) that already has a displayable twin (kind 0) — i.e. it
+    // has been converted — so it no longer shows a QR slide.
+    void DedupConverted (void)
+    {
+        for (unsigned a = 0; a < m_nCount; )
+        {
+            bool drop = false;
+            if (m_Kind[a] == 1)
+                for (unsigned b = 0; b < m_nCount; ++b)
+                    if (b != a && m_Kind[b] == 0 && SameBase (a, b)) { drop = true; break; }
+            if (drop)
+            {
+                for (unsigned j = a; j + 1 < m_nCount; ++j)
+                {
+                    for (unsigned c = 0; c < kMaxPath; ++c) m_Paths[j][c] = m_Paths[j + 1][c];
+                    m_Kind[j] = m_Kind[j + 1];
+                    m_NameOff[j] = m_NameOff[j + 1];
+                }
+                m_nCount--;
+            }
+            else ++a;
+        }
     }
 
     static const unsigned kMaxPhotos = 64;
