@@ -297,6 +297,26 @@ void CWebServer::Handle (CSocket *pConn)
 
 	bool isPost = (method[0] == 'P');
 
+	// OS captive-detection probes. Answering each with its vendor's expected "you have internet"
+	// response makes the phone BELIEVE the AP is online, so it STAYS joined to the frame instead of
+	// dropping back to cellular/home Wi-Fi. That is what makes the convert-slide URL QR reach us in
+	// full Safari (the phone must still be on 192.168.1.1's network when it scans). GETs, no body.
+	if (!isPost)
+	{
+		if (pathEq (path, "/generate_204") || pathEq (path, "/gen_204"))
+		{ SendHead (pConn, "204 No Content", "text/plain", 0); return; }        // Android
+		if (pathEq (path, "/hotspot-detect.html") || pathEq (path, "/library/test/success.html"))
+		{ static const char ok[] = "<HTML><HEAD><TITLE>Success</TITLE></HEAD><BODY>Success</BODY></HTML>";
+		  SendHead (pConn, "200 OK", "text/html", sizeof ok - 1);
+		  sendAll (pConn, (const u8 *) ok, sizeof ok - 1); return; }            // iOS / macOS
+		if (pathEq (path, "/ncsi.txt"))
+		{ static const char t[] = "Microsoft NCSI"; SendHead (pConn, "200 OK", "text/plain", sizeof t - 1);
+		  sendAll (pConn, (const u8 *) t, sizeof t - 1); return; }              // Windows
+		if (pathEq (path, "/connecttest.txt"))
+		{ static const char t[] = "Microsoft Connect Test"; SendHead (pConn, "200 OK", "text/plain", sizeof t - 1);
+		  sendAll (pConn, (const u8 *) t, sizeof t - 1); return; }              // Windows
+	}
+
 	// Read the body (if any) right after the headers.
 	u8 *body = m_pBuf + hdrEnd;
 	unsigned bodyHave = total - (unsigned) hdrEnd;
