@@ -1,45 +1,49 @@
 //
-// webserver.h — HTTP server for the Lumen Frame settings page (served over the SoftAP). Renders
-// the current settings from CConfig and saves edits back to SD:/lumen.conf (restart to apply).
+// webserver.h — Lumen Frame web server. A tiny custom HTTP/1.0 server (a scheduler task) that
+// serves everything from ONE reused buffer allocated once (never freed -> no leak), so it can move
+// multi-MB HEIC/JPEG files that CHTTPDaemon's per-connection buffer could not (Circle's heap leaks
+// freed blocks > 512 KB). Single-threaded: one connection at a time, so the buffer is race-free.
+//
+// Routes:  GET  /            settings page (also the captive-portal landing)
+//          POST /            save settings -> confirm + Restart button
+//          POST /restart     reboot the frame
+//          GET  /photos      conversion page (opened in full Safari via the photo-slide URL QR)
+//          GET  /heic?i=N    stream the raw HEIC file N (phone's browser decodes it)
+//          POST /jpg?i=N     write the phone-converted JPEG back next to file N, then re-scan
 //
 #ifndef _webserver_h
 #define _webserver_h
 
-#include <circle/net/httpdaemon.h>
+#include <circle/sched/task.h>
 #include <circle/net/netsubsystem.h>
 #include <circle/net/socket.h>
 #include <circle/types.h>
-#include "Config.h"                   // app-layer config; via EXTRAINCLUDE=-I../app
+#include "Config.h"                   // via EXTRAINCLUDE=-I../app
 #include "content/IPhotoSource.h"     // via EXTRAINCLUDE=-I../src
 
-// Set TRUE when the settings page requests a restart (POST /restart); the kernel reboots.
-extern volatile bool g_restartRequested;
-// Set TRUE after a converted JPEG is written back; the kernel re-scans so the photo resolves
-// into the slideshow (and the HEIC's QR slide disappears) with no reboot.
-extern volatile bool g_rescanRequested;
+extern volatile bool g_restartRequested;   // settings page -> kernel reboots
+extern volatile bool g_rescanRequested;    // conversion write-back -> kernel re-scans
 
-class CWebServer : public CHTTPDaemon
+class CWebServer : public CTask
 {
 public:
-	CWebServer (CNetSubSystem *pNet, CConfig *pConfig, lf::IPhotoSource *pPhotos,
-		    CSocket *pSocket = 0);
+	CWebServer (CNetSubSystem *pNet, CConfig *pConfig, lf::IPhotoSource *pPhotos);
 	~CWebServer (void);
 
-	CHTTPDaemon *CreateWorker (CNetSubSystem *pNet, CSocket *pSocket) override;
-
-	THTTPStatus GetContent (const char *pPath, const char *pParams, const char *pFormData,
-				u8 *pBuffer, unsigned *pLength, const char **ppContentType) override;
+	void Run (void) override;   // listen on :80, accept + handle connections forever
 
 private:
-	void ApplyForm (const char *pFormData);     // parse urlencoded POST body -> config -> save
-	THTTPStatus ServeHeic (const char *pParams, u8 *pBuffer, unsigned *pLength,
-			       const char **ppContentType);   // GET /heic?i=N -> raw file bytes
-	THTTPStatus SaveJpg (const char *pParams, u8 *pBuffer, unsigned *pLength,
-			     const char **ppContentType);     // POST /jpg?i=N  -> write back
+	void Handle (CSocket *pConn);
+	void SendHead (CSocket *pConn, const char *pStatus, const char *pType, unsigned nLen);
+	void SendPage (CSocket *pConn, const char *pHtml);   // text/html 200
+	void ServeHeic (CSocket *pConn, const char *pQuery);
+	void SaveJpg   (CSocket *pConn, const char *pQuery, const u8 *pBody, unsigned nBodyLen);
 
 	CNetSubSystem    *m_pNet;
 	CConfig          *m_pConfig;
 	lf::IPhotoSource *m_pPhotos;
+	u8               *m_pBuf;      // reused buffer (request/body/file); allocated once, never freed
+	unsigned          m_nBufSize;
 };
 
 #endif

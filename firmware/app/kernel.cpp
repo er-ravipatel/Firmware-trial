@@ -118,10 +118,10 @@ void CKernel::SetupPlugins (void)
     m_Photo.set_clock (&m_ElapsedMs);          // drives dwell + cross-fade timing
     m_Photo.set_time_us (&CTimer::GetClockTicks);   // microsecond clock for perf logging
 
-    // Wi-Fi-join QR the plugin draws on "needs-convert" (HEIC) slides — same AP as settings.
-    CString QrPayload;
-    QrPayload.Format ("WIFI:S:%s;T:nopass;;", m_Config.GetStr ("ssid", AP_SSID));
-    m_Photo.set_convert_qr ((const char *) QrPayload);
+    // The photo (needs-convert) slide's QR is a URL to the conversion page. Scanning it with the
+    // phone CAMERA opens it in full Safari (which decodes HEIC + can convert via canvas) — unlike
+    // the boot splash's Wi-Fi-join QR, which lands in the limited captive-portal browser.
+    m_Photo.set_convert_qr ("http://192.168.1.1/photos");
 
     m_Plugins[0] = &m_Photo;
     m_Scheduler.add ({"photo", true, 90, -1, -1});   // slideshow is the only screen
