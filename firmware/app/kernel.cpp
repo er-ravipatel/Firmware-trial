@@ -3,6 +3,7 @@
 //
 #include "kernel.h"
 #include <circle/timer.h>
+#include <circle/string.h>
 
 static const char FromKernel[] = "kernel";
 
@@ -62,27 +63,55 @@ void CKernel::Activate (int nIndex)
     m_Canvas.present ();
 }
 
+void CKernel::BootMessage (unsigned &nY, const char *pMsg, lf::Rgb Color)
+{
+    m_Canvas.text (60, nY, pMsg, Color);
+    m_Canvas.present ();
+    nY += 26;
+    CTimer::SimpleMsDelay (650);   // deliberately paced so the boot is watchable
+}
+
 TShutdownMode CKernel::Run (void)
 {
-    // Mount the SD card and scan for photos. On any failure the PhotoFrame plugin falls
-    // back to its embedded image.
-    if (f_mount (&m_FileSystem, "SD:", 1) == FR_OK)
+    const unsigned W = m_Canvas.width ();
+
+    // ---- Visible boot sequence (bare metal boots in well under a second; this is paced
+    // on purpose so the steps are watchable on screen) ----
+    m_Canvas.clear (lf::rgb::Navy);
+    m_Canvas.text (60, 54, "LUMEN FRAME", lf::rgb::Cyan);
+    m_Canvas.text (60, 82, "bare-metal firmware OS   (Circle / Pi Zero 2 W)", lf::rgb::White);
+    m_Canvas.fill_rect (60, 110, W - 120, 3, lf::rgb::Cyan);
+    m_Canvas.present ();
+    CTimer::SimpleMsDelay (1000);
+
+    unsigned nY = 144;
+    BootMessage (nY, "[ok]  CPU cores + MMU + framebuffer", lf::rgb::Green);
+
+    boolean bMounted = (f_mount (&m_FileSystem, "SD:", 1) == FR_OK);
+    BootMessage (nY, bMounted ? "[ok]  SD card mounted (FatFs)"
+                              : "[!!]  SD card mount FAILED (using embedded image)",
+                 bMounted ? lf::rgb::Green : lf::rgb::Red);
+
+    unsigned nPhotos = 0;
+    if (bMounted)
     {
         m_PhotoSource.Scan ("SD:/");
-        if (m_PhotoSource.count () > 0)
+        nPhotos = m_PhotoSource.count ();
+        if (nPhotos > 0)
         {
-            m_Logger.Write (FromKernel, LogNotice, "Found %u photo(s) on SD", m_PhotoSource.count ());
             m_Photo.set_source (&m_PhotoSource);
         }
-        else
-        {
-            m_Logger.Write (FromKernel, LogWarning, "No *.jpg on SD; using embedded image");
-        }
     }
-    else
-    {
-        m_Logger.Write (FromKernel, LogWarning, "Could not mount SD; using embedded image");
-    }
+    CString PhotoMsg;
+    PhotoMsg.Format ("[ok]  photos on card: %u found", nPhotos);
+    BootMessage (nY, (const char *) PhotoMsg, nPhotos ? lf::rgb::Green : lf::rgb::Yellow);
+
+    m_Logger.Write (FromKernel, LogNotice, "Boot: mounted=%d photos=%u",
+                    (int) bMounted, nPhotos);
+
+    BootMessage (nY, "[ok]  plugins registered: photo, clock", lf::rgb::Green);
+    BootMessage (nY, ">>>   starting slideshow ...", lf::rgb::White);
+    CTimer::SimpleMsDelay (1000);
 
     SetupPlugins ();
 

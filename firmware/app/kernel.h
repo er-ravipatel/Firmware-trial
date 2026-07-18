@@ -45,6 +45,7 @@ public:
 private:
     void SetupPlugins (void);
     void Activate (int nIndex);
+    void BootMessage (unsigned &nY, const char *pMsg, lf::Rgb Color);
 
     // do not change this order
     CActLED            m_ActLED;

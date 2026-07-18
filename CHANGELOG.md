@@ -43,6 +43,9 @@ _Format loosely follows [Keep a Changelog](https://keepachangelog.com/)._
 - **Multi-photo slideshow with scaling:** IPhotoSource abstraction + CSdPhotoSource (scans SD
   for *.jpg); PhotoFrame cycles all photos, decoding + aspect-fit scaling (ICanvas.blit_rgb_scaled)
   with letterbox/pillarbox. Verified in QEMU across 3 photos of different sizes/orientations.
+- **Visible boot sequence** on the framebuffer (title + paced [ok] init steps: framebuffer, SD
+  mount, photo scan, plugins) before the slideshow — watchable in a live QEMU window (WSLg).
+  tools/run_qemu.sh opens an SDL window with the SD card attached.
 
 ### Changed
 - **Major pivot:** re-architected from a Linux appliance to a **genuine bare-metal firmware OS
