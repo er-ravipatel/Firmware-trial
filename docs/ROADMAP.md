@@ -23,7 +23,8 @@ _Emulator-first (ADR-010): prove in QEMU, then confirm on real hardware._
 - [x] Render engine: fullscreen slideshow — scan SD for *.jpg, cycle, aspect-fit scaling,
       **cross-fade transitions** (self-advancing dwell+dissolve), and **EXIF rotation** (upright
       phone photos). Verified in QEMU with real iPhone photos. TODO on HW: NEON-optimize the blend.
-- [ ] USB pendrive auto-import (Circle USB MSD) → FAT data area.
+- [x] USB pendrive detection + slideshow from USB (Circle USB host + MSD + FatFs; tries USB
+      first, falls back to SD, then embedded). Verified in QEMU. TODO: auto-import/copy to data area.
 - [ ] `wifi.conf` onboarding; WLAN station joins WiFi (Spike C4 — also test SoftAP feasibility).
 - [ ] USB offline signed firmware update with A/B + rollback.
 - [ ] Watchdog recovers a hung render loop.

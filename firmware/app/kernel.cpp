@@ -14,6 +14,7 @@ static const unsigned kTickMs = 100;
 CKernel::CKernel (void)
 :   m_Timer (&m_Interrupt),
     m_Logger (m_Options.GetLogLevel (), &m_Timer),
+    m_USBHCI (&m_Interrupt, &m_Timer),
     m_EMMC (&m_Interrupt, &m_Timer, &m_ActLED),
     m_Graphics (m_Options.GetWidth (), m_Options.GetHeight (), FALSE),
     m_Canvas (m_Graphics),
@@ -31,12 +32,16 @@ boolean CKernel::Initialize (void)
 {
     boolean bOK = TRUE;
 
+    // Essential subsystems — a failure here aborts boot.
     if (bOK) bOK = m_Serial.Initialize (115200);
     if (bOK) bOK = m_Logger.Initialize (&m_Serial);
     if (bOK) bOK = m_Interrupt.Initialize ();
     if (bOK) bOK = m_Timer.Initialize ();
-    if (bOK) bOK = m_EMMC.Initialize ();
     if (bOK) bOK = m_Graphics.Initialize ();
+
+    // Storage is OPTIONAL: the frame must still boot (embedded image) with no USB and no SD.
+    m_USBHCI.Initialize ();   // enumerates a USB pendrive if present
+    m_EMMC.Initialize ();     // SD card if present (returns false when absent)
 
     return bOK;
 }
@@ -89,27 +94,49 @@ TShutdownMode CKernel::Run (void)
     unsigned nY = 144;
     BootMessage (nY, "[ok]  CPU cores + MMU + framebuffer", lf::rgb::Green);
 
-    boolean bMounted = (f_mount (&m_FileSystem, "SD:", 1) == FR_OK);
-    BootMessage (nY, bMounted ? "[ok]  SD card mounted (FatFs)"
-                              : "[!!]  SD card mount FAILED (using embedded image)",
-                 bMounted ? lf::rgb::Green : lf::rgb::Red);
-
+    // Prefer a USB pendrive; fall back to the SD card; then the embedded image.
     unsigned nPhotos = 0;
-    if (bMounted)
+    const char *pSource = "embedded fallback";
+
+    boolean bUSB = (f_mount (&m_FileSystemUSB, "USB:", 1) == FR_OK);
+    if (bUSB)
     {
-        m_PhotoSource.Scan ("SD:/");
-        nPhotos = m_PhotoSource.count ();
-        if (nPhotos > 0)
-        {
-            m_Photo.set_source (&m_PhotoSource);
-        }
+        m_PhotoSource.Scan ("USB:/");
     }
+    unsigned nUSB = bUSB ? m_PhotoSource.count () : 0;
+
+    if (nUSB > 0)
+    {
+        nPhotos = nUSB;
+        pSource = "USB pendrive";
+        m_Photo.set_source (&m_PhotoSource);
+        BootMessage (nY, "[ok]  USB pendrive detected", lf::rgb::Green);
+    }
+    else
+    {
+        BootMessage (nY, bUSB ? "[--]  USB drive present, no photos"
+                              : "[--]  USB pendrive: not detected", lf::rgb::Yellow);
+
+        boolean bSD = (f_mount (&m_FileSystemSD, "SD:", 1) == FR_OK);
+        if (bSD)
+        {
+            m_PhotoSource.Scan ("SD:/");
+            nPhotos = m_PhotoSource.count ();
+            if (nPhotos > 0)
+            {
+                pSource = "SD card";
+                m_Photo.set_source (&m_PhotoSource);
+            }
+        }
+        BootMessage (nY, bSD ? "[ok]  SD card mounted (FatFs)"
+                             : "[!!]  SD card mount FAILED", bSD ? lf::rgb::Green : lf::rgb::Red);
+    }
+
     CString PhotoMsg;
-    PhotoMsg.Format ("[ok]  photos on card: %u found", nPhotos);
+    PhotoMsg.Format ("[ok]  photos: %u   (source: %s)", nPhotos, pSource);
     BootMessage (nY, (const char *) PhotoMsg, nPhotos ? lf::rgb::Green : lf::rgb::Yellow);
 
-    m_Logger.Write (FromKernel, LogNotice, "Boot: mounted=%d photos=%u",
-                    (int) bMounted, nPhotos);
+    m_Logger.Write (FromKernel, LogNotice, "Boot: source=%s photos=%u", pSource, nPhotos);
 
     BootMessage (nY, "[ok]  plugins registered: photo, clock", lf::rgb::Green);
     BootMessage (nY, ">>>   starting slideshow ...", lf::rgb::White);

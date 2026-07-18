@@ -17,6 +17,7 @@
 #include <circle/logger.h>
 #include <circle/2dgraphics.h>
 #include <circle/types.h>
+#include <circle/usb/usbhcidevice.h>
 #include <SDCard/emmc.h>
 #include <fatfs/ff.h>
 
@@ -56,11 +57,13 @@ private:
     CInterruptSystem   m_Interrupt;
     CTimer             m_Timer;
     CLogger            m_Logger;
+    CUSBHCIDevice      m_USBHCI;
     CEMMCDevice        m_EMMC;
     C2DGraphics        m_Graphics;
 
     CircleCanvas       m_Canvas;
-    FATFS              m_FileSystem;
+    FATFS              m_FileSystemSD;
+    FATFS              m_FileSystemUSB;
     CSdPhotoSource     m_PhotoSource;
     u32                m_ElapsedMs;     // before m_Clock (which holds &m_ElapsedMs)
 

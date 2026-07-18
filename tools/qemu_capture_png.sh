@@ -4,14 +4,20 @@
 # Usage: ./tools/qemu_capture_png.sh <kernel8.img> <out.png> [boot_secs]
 set -euo pipefail
 
-KERNEL="${1:?usage: qemu_capture_png.sh <kernel8.img> <out.png> [boot_secs] [sd.img]}"
+KERNEL="${1:?usage: qemu_capture_png.sh <kernel8.img> <out.png> [boot_secs] [sd.img] [usb.img]}"
 OUTPNG="${2:?output png path}"
 WAIT="${3:-3}"
 SDIMG="${4:-}"
+USBIMG="${5:-}"
+[ "$SDIMG" = "-" ] && SDIMG=""     # sentinel for "no SD"
+[ "$USBIMG" = "-" ] && USBIMG=""
 
 SDARGS=()
 if [ -n "$SDIMG" ]; then
-    SDARGS=(-drive "file=$SDIMG,if=sd,format=raw")
+    SDARGS+=(-drive "file=$SDIMG,if=sd,format=raw")
+fi
+if [ -n "$USBIMG" ]; then
+    SDARGS+=(-drive "file=$USBIMG,if=none,id=stick,format=raw" -device "usb-storage,drive=stick")
 fi
 
 TMPPPM="$(mktemp --suffix=.ppm)"

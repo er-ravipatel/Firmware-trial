@@ -129,7 +129,7 @@ void PhotoFramePlugin::render(ICanvas& canvas) {
         caption[k++] = '/';
         caption[k++] = char('0' + (n / 10) % 10);
         caption[k++] = char('0' + n % 10);
-        const char* sfx = "   cross-fade slideshow (SD)";
+        const char* sfx = "   cross-fade slideshow";
         for (const char* p = sfx; *p; ++p) caption[k++] = *p;
     } else {
         const char* s = "embedded fallback";
