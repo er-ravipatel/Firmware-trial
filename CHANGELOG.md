@@ -46,6 +46,10 @@ _Format loosely follows [Keep a Changelog](https://keepachangelog.com/)._
 - **Visible boot sequence** on the framebuffer (title + paced [ok] init steps: framebuffer, SD
   mount, photo scan, plugins) before the slideshow — watchable in a live QEMU window (WSLg).
   tools/run_qemu.sh opens an SDL window with the SD card attached.
+- **Cross-fade transitions + EXIF rotation:** PhotoFrame is now a self-advancing slideshow with
+  dwell + dissolve (pre-rendered frame buffers, ICanvas.blit_rgb_blend). ExifReader (unit-tested,
+  LE/BE) + rotation applied at decode so phone photos display upright. Verified in QEMU with real
+  iPhone photos (HEIC transcoded via tools/make_sd_from.sh). 21 host tests, 376 checks passing.
 
 ### Changed
 - **Major pivot:** re-architected from a Linux appliance to a **genuine bare-metal firmware OS

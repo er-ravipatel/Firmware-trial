@@ -15,7 +15,9 @@ add_executable(host_tests
     test_ringbuffer.cpp
     test_eventbus.cpp
     test_plugin_scheduler.cpp
+    test_exif.cpp
     ${FW_SRC}/util/Sha256.cpp
+    ${FW_SRC}/content/ExifReader.cpp
 )
 
 enable_testing()
