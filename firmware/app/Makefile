@@ -18,7 +18,10 @@ OBJS = main.o kernel.o \
        ../src/content/JpegDecoder.o \
        ../src/content/stb_image_impl.o
 
-LIBS = $(CIRCLEHOME)/lib/libcircle.a
+LIBS = $(CIRCLEHOME)/addon/fatfs/libfatfs.a \
+       $(CIRCLEHOME)/addon/SDCard/libsdcard.a \
+       $(CIRCLEHOME)/lib/fs/libfs.a \
+       $(CIRCLEHOME)/lib/libcircle.a
 
 include $(CIRCLEHOME)/Rules.mk
 

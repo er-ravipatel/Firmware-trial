@@ -9,7 +9,10 @@ void PhotoFramePlugin::ensure_decoded() {
         return;
     }
     tried_ = true;
-    JpegDecoder::decode(lumen_test_jpg, lumen_test_jpg_len, img_);
+    // External (SD) source if provided, else the embedded fallback image.
+    const uint8_t* data = jpeg_ ? jpeg_ : lumen_test_jpg;
+    unsigned len = jpeg_ ? jpeg_len_ : lumen_test_jpg_len;
+    JpegDecoder::decode(data, len, img_);
 }
 
 void PhotoFramePlugin::render(ICanvas& canvas) {
@@ -54,7 +57,8 @@ void PhotoFramePlugin::render(ICanvas& canvas) {
     caption[k++] = char('1' + index_);
     caption[k++] = '/';
     caption[k++] = '3';
-    const char* suffix = (img_.rgb ? "   JPEG decoded (stb_image)   " : "   decode failed   ");
+    const char* suffix = (img_.rgb ? (jpeg_ ? "   JPEG from SD card   " : "   JPEG embedded   ")
+                                   : "   decode failed   ");
     for (const char* p = suffix; *p; ++p) caption[k++] = *p;
     caption[k] = '\0';
     canvas.text(40, H - 28, caption, rgb::White);

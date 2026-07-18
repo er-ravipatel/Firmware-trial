@@ -13,7 +13,8 @@ _Emulator-first (ADR-010): prove in QEMU, then confirm on real hardware._
 - [ ] **Spike C1 (hardware):** same on the Zero 2 W → Acer panel via TV board (pin 1366×768).
 - [x] **Spike C2 (decode):** decode a real JPEG (stb_image, ported & building under Circle) →
       display it. Verified in QEMU with an embedded baseline JPEG.
-- [ ] **Spike C2 (storage):** read the JPEG from an SD/FAT image instead of embedding it.
+- [x] **Spike C2 (storage):** read the JPEG from an SD/FAT image (Circle EMMC + FatFs). Verified
+      in QEMU — loads /photo.jpg off a FAT card and displays it. (Unlocks USB import & OTA paths.)
 - [ ] **Spike C5 (hardware only):** A/B kernel swap via Pi `tryboot` + auto-rollback.
 
 ## Milestone 1 — MVP: genuine firmware on the wall

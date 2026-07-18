@@ -1,8 +1,8 @@
 //
 // kernel.h — Lumen Frame top-level kernel (bare-metal Circle app).
 //
-// Brings up the framebuffer and runs the modular display: a PluginScheduler rotates
-// ScreenPlugins (photo, clock, ...) onto the CircleCanvas. See docs/IMPLEMENTATION.md.
+// Brings up the framebuffer + SD/FatFs, then runs the modular display: a PluginScheduler
+// rotates ScreenPlugins (photo, clock, ...) onto the CircleCanvas.
 //
 #ifndef _kernel_h
 #define _kernel_h
@@ -10,8 +10,15 @@
 #include <circle/actled.h>
 #include <circle/koptions.h>
 #include <circle/devicenameservice.h>
+#include <circle/serial.h>
+#include <circle/exceptionhandler.h>
+#include <circle/interrupt.h>
+#include <circle/timer.h>
+#include <circle/logger.h>
 #include <circle/2dgraphics.h>
 #include <circle/types.h>
+#include <SDCard/emmc.h>
+#include <fatfs/ff.h>
 
 #include "CircleCanvas.h"
 #include "app/PluginScheduler.h"       // via EXTRAINCLUDE=-I../src
@@ -37,15 +44,23 @@ public:
 private:
     void SetupPlugins (void);
     void Activate (int nIndex);
+    // Load a whole file into a malloc'd buffer; returns nullptr on failure.
+    u8 *LoadFile (const char *pPath, unsigned &nSize);
 
     // do not change this order
     CActLED            m_ActLED;
     CKernelOptions     m_Options;
     CDeviceNameService m_DeviceNameService;
+    CSerialDevice      m_Serial;
+    CExceptionHandler  m_ExceptionHandler;
+    CInterruptSystem   m_Interrupt;
+    CTimer             m_Timer;
+    CLogger            m_Logger;
+    CEMMCDevice        m_EMMC;
     C2DGraphics        m_Graphics;
 
-    // Display stack (m_Graphics must be constructed before m_Canvas).
     CircleCanvas       m_Canvas;
+    FATFS              m_FileSystem;
     u32                m_ElapsedMs;     // before m_Clock (which holds &m_ElapsedMs)
 
     lf::PluginScheduler<8> m_Scheduler;

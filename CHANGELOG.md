@@ -37,6 +37,9 @@ _Format loosely follows [Keep a Changelog](https://keepachangelog.com/)._
 - **Real JPEG decode on bare metal (Spike C2 decode):** vendored stb_image, building under
   Circle's flags; JpegDecoder wrapper; ICanvas.blit_rgb. PhotoFrame plugin now decodes and
   displays an embedded baseline JPEG in QEMU. tools/gen_test_asset.sh generates the test image.
+- **JPEG from SD card (Spike C2 storage):** wired Circle EMMC + FatFs; kernel mounts the SD and
+  loads /photo.jpg, passed to the PhotoFrame plugin (embedded image as fallback). Verified in
+  QEMU with a FAT image (tools/make_sd.sh). Lights up the SD/FatFs path USB import & OTA reuse.
 
 ### Changed
 - **Major pivot:** re-architected from a Linux appliance to a **genuine bare-metal firmware OS

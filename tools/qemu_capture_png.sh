@@ -4,9 +4,15 @@
 # Usage: ./tools/qemu_capture_png.sh <kernel8.img> <out.png> [boot_secs]
 set -euo pipefail
 
-KERNEL="${1:?usage: qemu_capture_png.sh <kernel8.img> <out.png> [boot_secs]}"
+KERNEL="${1:?usage: qemu_capture_png.sh <kernel8.img> <out.png> [boot_secs] [sd.img]}"
 OUTPNG="${2:?output png path}"
 WAIT="${3:-3}"
+SDIMG="${4:-}"
+
+SDARGS=()
+if [ -n "$SDIMG" ]; then
+    SDARGS=(-drive "file=$SDIMG,if=sd,format=raw")
+fi
 
 TMPPPM="$(mktemp --suffix=.ppm)"
 trap 'rm -f "$TMPPPM"' EXIT
@@ -15,6 +21,7 @@ trap 'rm -f "$TMPPPM"' EXIT
     qemu-system-aarch64 \
         -M raspi3b -kernel "$KERNEL" \
         -display none -monitor stdio -serial null -no-reboot \
+        "${SDARGS[@]}" \
         >/dev/null 2>&1 || true
 
 if [ ! -s "$TMPPPM" ]; then
