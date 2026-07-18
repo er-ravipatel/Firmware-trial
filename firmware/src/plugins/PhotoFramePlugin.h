@@ -26,6 +26,22 @@ public:
     // Restart the slideshow (e.g. after the photo source changes at runtime).
     void reset();
 
+    // --- Perf instrumentation (read by the kernel for logging) ---
+    struct LoadStats {
+        int index = -1;
+        unsigned jpeg_bytes = 0;
+        unsigned orig_w = 0, orig_h = 0, work_w = 0, work_h = 0;
+        unsigned decode_ms = 0, scale_ms = 0;
+    };
+    void set_time_us(unsigned (*fn)()) { time_us_ = fn; }   // microsecond clock for measuring
+    bool take_load_stats(LoadStats& out) {                  // true (and clears) if new stats
+        if (!stats_pending_) return false;
+        out = stats_;
+        stats_pending_ = false;
+        return true;
+    }
+    bool is_transitioning() const { return state_ == State::Fading; }
+
 private:
     enum class State { Empty, Showing, Fading };
 
@@ -57,6 +73,11 @@ private:
     uint8_t* fbA_ = nullptr;     // rendered frame for the current/outgoing photo
     uint8_t* fbB_ = nullptr;     // rendered frame for the incoming photo
     unsigned fw_ = 0, fh_ = 0;
+
+    unsigned (*time_us_)() = nullptr;
+    unsigned us() const { return time_us_ ? time_us_() : 0; }
+    LoadStats stats_{};
+    bool stats_pending_ = false;
 };
 
 }  // namespace lf

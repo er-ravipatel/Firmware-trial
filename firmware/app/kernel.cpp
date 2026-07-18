@@ -48,6 +48,7 @@ boolean CKernel::Initialize (void)
 void CKernel::SetupPlugins (void)
 {
     m_Photo.set_clock (&m_ElapsedMs);          // drives dwell + cross-fade timing
+    m_Photo.set_time_us (&CTimer::GetClockTicks);   // microsecond clock for perf logging
 
     m_Plugins[0] = &m_Photo;
     m_Scheduler.add ({"photo", true, 24, -1, -1});   // slideshow is the star
@@ -171,6 +172,11 @@ TShutdownMode CKernel::Run (void)
     m_ElapsedMs = nSwitchAtMs;
     Activate (m_Scheduler.next (kNowMin));
 
+    // Per-second frame-timing accumulators (all microseconds).
+    unsigned nStatStartMs = m_ElapsedMs;
+    unsigned nFrames = 0, nFadeFrames = 0;
+    unsigned nRenderSum = 0, nRenderMax = 0, nPresentSum = 0, nPresentMax = 0;
+
     while (1)
     {
         // Real elapsed time drives smooth Ken Burns + cross-fade animation (frame-rate
@@ -192,21 +198,57 @@ TShutdownMode CKernel::Run (void)
         if (nCur >= 0 && m_Plugins[nCur]->wants_continuous_redraw ())
         {
             m_Plugins[nCur]->update ();
+
+            unsigned r0 = CTimer::GetClockTicks ();
             m_Plugins[nCur]->render (m_Canvas);
+            unsigned r1 = CTimer::GetClockTicks ();
 
             // TEMP color-order test: labeled pure-colour swatches (top-right). The letter says
-            // what the swatch SHOULD be; report what colour you actually see for each.
+            // what the swatch SHOULD be; report what colour you actually see.
             unsigned sx = m_Canvas.width () - 4 * 44 - 12;
-            m_Canvas.fill_rect (sx,        8, 38, 24, lf::rgb::Red);
-            m_Canvas.fill_rect (sx + 44,   8, 38, 24, lf::rgb::Green);
-            m_Canvas.fill_rect (sx + 88,   8, 38, 24, lf::rgb::Blue);
-            m_Canvas.fill_rect (sx + 132,  8, 38, 24, lf::rgb::White);
-            m_Canvas.text (sx + 14,       36, "R", lf::rgb::White);
-            m_Canvas.text (sx + 58,       36, "G", lf::rgb::White);
-            m_Canvas.text (sx + 102,      36, "B", lf::rgb::White);
-            m_Canvas.text (sx + 146,      36, "W", lf::rgb::Yellow);
+            m_Canvas.fill_rect (sx,       8, 38, 24, lf::rgb::Red);
+            m_Canvas.fill_rect (sx + 44,  8, 38, 24, lf::rgb::Green);
+            m_Canvas.fill_rect (sx + 88,  8, 38, 24, lf::rgb::Blue);
+            m_Canvas.fill_rect (sx + 132, 8, 38, 24, lf::rgb::White);
+            m_Canvas.text (sx + 14,  36, "R", lf::rgb::White);
+            m_Canvas.text (sx + 58,  36, "G", lf::rgb::White);
+            m_Canvas.text (sx + 102, 36, "B", lf::rgb::White);
+            m_Canvas.text (sx + 146, 36, "W", lf::rgb::Yellow);
 
             m_Canvas.present ();
+            unsigned r2 = CTimer::GetClockTicks ();
+
+            // Accumulate frame timings.
+            unsigned rus = r1 - r0, pus = r2 - r1;
+            nFrames++;
+            nRenderSum += rus; if (rus > nRenderMax) nRenderMax = rus;
+            nPresentSum += pus; if (pus > nPresentMax) nPresentMax = pus;
+            if (m_Photo.is_transitioning ()) nFadeFrames++;
+
+            // Log per-photo load stats (decode + downscale) when a new photo was decoded.
+            lf::PhotoFramePlugin::LoadStats ls;
+            if (m_Photo.take_load_stats (ls))
+            {
+                m_Logger.Write (FromKernel, LogNotice,
+                    "load: photo=%d bytes=%u orig=%ux%u work=%ux%u decode=%ums scale=%ums",
+                    ls.index, ls.jpeg_bytes, ls.orig_w, ls.orig_h, ls.work_w, ls.work_h,
+                    ls.decode_ms, ls.scale_ms);
+            }
+
+            // Log per-second frame-timing aggregate.
+            unsigned nWin = m_ElapsedMs - nStatStartMs;
+            if (nWin >= 1000 && nFrames > 0)
+            {
+                m_Logger.Write (FromKernel, LogNotice,
+                    "perf: fps=%u frame_avg=%uus render_avg=%uus render_max=%uus "
+                    "present_avg=%uus present_max=%uus fade_frames=%u",
+                    nFrames * 1000 / nWin, (nRenderSum + nPresentSum) / nFrames,
+                    nRenderSum / nFrames, nRenderMax, nPresentSum / nFrames, nPresentMax,
+                    nFadeFrames);
+                nStatStartMs = m_ElapsedMs;
+                nFrames = nFadeFrames = 0;
+                nRenderSum = nRenderMax = nPresentSum = nPresentMax = 0;
+            }
         }
 
         unsigned nDurMs = (nCur >= 0) ? m_Scheduler.at (nCur).duration_s * 1000u : 1000u;

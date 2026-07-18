@@ -94,8 +94,22 @@ void PhotoFramePlugin::load(int idx, DecodedImage& img) {
         data = lumen_test_jpg;
         len = lumen_test_jpg_len;
     }
+    unsigned t0 = us();
     JpegDecoder::decode(data, len, img);
+    unsigned t1 = us();
+    unsigned ow = img.w, oh = img.h;
     downscale_to_work(img);
+    unsigned t2 = us();
+
+    stats_.index = idx;
+    stats_.jpeg_bytes = len;
+    stats_.orig_w = ow;
+    stats_.orig_h = oh;
+    stats_.work_w = img.w;
+    stats_.work_h = img.h;
+    stats_.decode_ms = (t1 - t0) / 1000;
+    stats_.scale_ms = (t2 - t1) / 1000;
+    stats_pending_ = true;
 }
 
 // Ken Burns: animate zoom + pan over `progress` [0,1], sampled with fixed-point bilinear.
