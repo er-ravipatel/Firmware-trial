@@ -48,6 +48,21 @@ public:
         }
     }
 
+    // Blit an RGB888 source (sw x sh) scaled to fit dw x dh at (dx, dy), nearest-neighbor.
+    // Default implementation is per-pixel; backends may override for speed.
+    virtual void blit_rgb_scaled(unsigned dx, unsigned dy, unsigned dw, unsigned dh,
+                                 const uint8_t* rgb, unsigned sw, unsigned sh) {
+        if (dw == 0 || dh == 0 || sw == 0 || sh == 0) return;
+        for (unsigned r = 0; r < dh; ++r) {
+            unsigned sy = r * sh / dh;
+            for (unsigned c = 0; c < dw; ++c) {
+                unsigned sx = c * sw / dw;
+                const uint8_t* p = rgb + (static_cast<unsigned long>(sy) * sw + sx) * 3;
+                set_pixel(dx + c, dy + r, Rgb{p[0], p[1], p[2]});
+            }
+        }
+    }
+
     // Flush the back buffer to the display (double-buffered backends). Default: no-op.
     virtual void present() {}
 };

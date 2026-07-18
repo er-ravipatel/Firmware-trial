@@ -21,6 +21,7 @@
 #include <fatfs/ff.h>
 
 #include "CircleCanvas.h"
+#include "SdPhotoSource.h"
 #include "app/PluginScheduler.h"       // via EXTRAINCLUDE=-I../src
 #include "plugins/PhotoFramePlugin.h"
 #include "plugins/ClockPlugin.h"
@@ -44,8 +45,6 @@ public:
 private:
     void SetupPlugins (void);
     void Activate (int nIndex);
-    // Load a whole file into a malloc'd buffer; returns nullptr on failure.
-    u8 *LoadFile (const char *pPath, unsigned &nSize);
 
     // do not change this order
     CActLED            m_ActLED;
@@ -61,6 +60,7 @@ private:
 
     CircleCanvas       m_Canvas;
     FATFS              m_FileSystem;
+    CSdPhotoSource     m_PhotoSource;
     u32                m_ElapsedMs;     // before m_Clock (which holds &m_ElapsedMs)
 
     lf::PluginScheduler<8> m_Scheduler;

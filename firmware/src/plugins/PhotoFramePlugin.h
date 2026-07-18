@@ -1,9 +1,10 @@
-// PhotoFramePlugin — the photo-frame screen (plugin #1). Decodes and displays a JPEG.
-// Source is either an externally supplied buffer (e.g. loaded from SD) via set_jpeg(),
-// or an embedded fallback image. Falls back to a placeholder if decode fails.
+// PhotoFramePlugin — the photo-frame slideshow (plugin #1). Cycles through photos from an
+// IPhotoSource (e.g. the SD card), decoding each JPEG and scaling it to fit the frame,
+// preserving aspect ratio. Falls back to an embedded image if no source/photos are available.
 #pragma once
 #include <stdint.h>
 #include "../display/ScreenPlugin.h"
+#include "../content/IPhotoSource.h"
 #include "../content/JpegDecoder.h"
 
 namespace lf {
@@ -11,25 +12,25 @@ namespace lf {
 class PhotoFramePlugin : public ScreenPlugin {
 public:
     const char* id() const override { return "photo"; }
-    void on_activate() override { index_ = (index_ + 1) % kCount; }
+    void on_activate() override { advance(); }
     void render(ICanvas& canvas) override;
 
-    // Provide JPEG bytes from an external source (e.g. SD card). Overrides the embedded image.
-    void set_jpeg(const uint8_t* data, unsigned len) {
-        jpeg_ = data;
-        jpeg_len_ = len;
-        tried_ = false;
-        img_ = DecodedImage{};
+    // Provide the photo source (e.g. SD card). Resets the slideshow.
+    void set_source(IPhotoSource* source) {
+        source_ = source;
+        index_ = -1;
+        decoded_ = false;
+        JpegDecoder::free_image(img_);
     }
 
 private:
-    void ensure_decoded();
+    void advance();
+    void decode_current();
+    unsigned photo_count() const { return source_ ? source_->count() : 0; }
 
-    static constexpr int kCount = 3;
-    int index_ = -1;                 // first on_activate() -> 0 ("Photo 1/3")
-    bool tried_ = false;             // decode attempted?
-    const uint8_t* jpeg_ = nullptr;  // external source; nullptr => embedded fallback
-    unsigned jpeg_len_ = 0;
+    IPhotoSource* source_ = nullptr;
+    int index_ = -1;          // current photo; -1 before first advance
+    bool decoded_ = false;    // is img_ valid for the current index?
     DecodedImage img_{};
 };
 

@@ -40,6 +40,9 @@ _Format loosely follows [Keep a Changelog](https://keepachangelog.com/)._
 - **JPEG from SD card (Spike C2 storage):** wired Circle EMMC + FatFs; kernel mounts the SD and
   loads /photo.jpg, passed to the PhotoFrame plugin (embedded image as fallback). Verified in
   QEMU with a FAT image (tools/make_sd.sh). Lights up the SD/FatFs path USB import & OTA reuse.
+- **Multi-photo slideshow with scaling:** IPhotoSource abstraction + CSdPhotoSource (scans SD
+  for *.jpg); PhotoFrame cycles all photos, decoding + aspect-fit scaling (ICanvas.blit_rgb_scaled)
+  with letterbox/pillarbox. Verified in QEMU across 3 photos of different sizes/orientations.
 
 ### Changed
 - **Major pivot:** re-architected from a Linux appliance to a **genuine bare-metal firmware OS

@@ -3,7 +3,6 @@
 //
 #include "kernel.h"
 #include <circle/timer.h>
-#include <circle/alloc.h>
 
 static const char FromKernel[] = "kernel";
 
@@ -41,36 +40,6 @@ boolean CKernel::Initialize (void)
     return bOK;
 }
 
-u8 *CKernel::LoadFile (const char *pPath, unsigned &nSize)
-{
-    FIL File;
-    if (f_open (&File, pPath, FA_READ | FA_OPEN_EXISTING) != FR_OK)
-    {
-        return 0;
-    }
-
-    FSIZE_t nFileSize = f_size (&File);
-    u8 *pBuffer = (u8 *) malloc (nFileSize);
-    if (pBuffer == 0)
-    {
-        f_close (&File);
-        return 0;
-    }
-
-    UINT nRead = 0;
-    FRESULT Result = f_read (&File, pBuffer, (UINT) nFileSize, &nRead);
-    f_close (&File);
-
-    if (Result != FR_OK || nRead != nFileSize)
-    {
-        free (pBuffer);
-        return 0;
-    }
-
-    nSize = (unsigned) nFileSize;
-    return pBuffer;
-}
-
 void CKernel::SetupPlugins (void)
 {
     m_Plugins[0] = &m_Photo;
@@ -95,20 +64,19 @@ void CKernel::Activate (int nIndex)
 
 TShutdownMode CKernel::Run (void)
 {
-    // Mount the SD card and load the photo, if present. On any failure the PhotoFrame
-    // plugin falls back to its embedded image.
+    // Mount the SD card and scan for photos. On any failure the PhotoFrame plugin falls
+    // back to its embedded image.
     if (f_mount (&m_FileSystem, "SD:", 1) == FR_OK)
     {
-        unsigned nLen = 0;
-        u8 *pJpeg = LoadFile ("SD:/photo.jpg", nLen);
-        if (pJpeg != 0)
+        m_PhotoSource.Scan ("SD:/");
+        if (m_PhotoSource.count () > 0)
         {
-            m_Logger.Write (FromKernel, LogNotice, "Loaded /photo.jpg from SD (%u bytes)", nLen);
-            m_Photo.set_jpeg (pJpeg, nLen);   // buffer intentionally kept for the app's lifetime
+            m_Logger.Write (FromKernel, LogNotice, "Found %u photo(s) on SD", m_PhotoSource.count ());
+            m_Photo.set_source (&m_PhotoSource);
         }
         else
         {
-            m_Logger.Write (FromKernel, LogWarning, "No /photo.jpg on SD; using embedded image");
+            m_Logger.Write (FromKernel, LogWarning, "No *.jpg on SD; using embedded image");
         }
     }
     else

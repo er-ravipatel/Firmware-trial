@@ -20,7 +20,8 @@ _Emulator-first (ADR-010): prove in QEMU, then confirm on real hardware._
 ## Milestone 1 — MVP: genuine firmware on the wall
 **Target outcome:** boots our OS to a slideshow from local photos; USB import; offline update.
 - [ ] Image layout: boot + A/B kernel slots + FAT data area.
-- [ ] Render engine: fullscreen slideshow, EXIF rotate, cross-fade (NEON).
+- [~] Render engine: fullscreen slideshow (done: scan SD for *.jpg, cycle, aspect-fit scaling
+      via IPhotoSource + PluginScheduler); TODO: EXIF rotate, cross-fade (NEON).
 - [ ] USB pendrive auto-import (Circle USB MSD) → FAT data area.
 - [ ] `wifi.conf` onboarding; WLAN station joins WiFi (Spike C4 — also test SoftAP feasibility).
 - [ ] USB offline signed firmware update with A/B + rollback.
