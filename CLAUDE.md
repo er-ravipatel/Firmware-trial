@@ -22,16 +22,22 @@ first** — current state, build/run commands, findings, and the pending next-st
 
 ## Project overview
 
-_Describe what the firmware does, the target MCU/board, and the toolchain here._
+Lumen Frame is a digital photo frame implemented as a **bare-metal firmware OS in C++ on Circle**
+(no Linux) for a **Raspberry Pi Zero 2 W** (BCM2837, `RASPPI=3`, AArch64), driving an Acer Aspire
+4347 LCD (1366×768) over HDMI. Photos load from SD/USB, decode via vendored stb_image, and display
+as a Fit + blurred-background Ken Burns slideshow with cross-fade. Current release: **v0.1.0-beta
+"offline"** (runs on real hardware; WiFi/web-UI is the next milestone). See [docs/STATUS.md](docs/STATUS.md).
 
 ## Commands
 
-_Fill these in once the build system exists. Examples:_
+Firmware builds in **WSL2 Ubuntu** — invoke via `wsl bash -lc "..."` (the agent's Bash tool is Git
+Bash and cannot see `/mnt/c`). Repo path in WSL: `/mnt/c/Workspace/Personal/Firmware-trial`.
 
-- Build:  `<build command>`   <!-- e.g. make, west build, cargo build -->
-- Flash:  `<flash command>`   <!-- e.g. make flash, west flash, cargo flash -->
-- Test:   `<test command>`
-- Clean:  `<clean command>`
+- Build:  `wsl bash -lc "cd /mnt/c/Workspace/Personal/Firmware-trial/firmware/app && make -j4"`  → `kernel8.img`
+- Deploy: `Copy-Item C:\Workspace\Personal\Firmware-trial\firmware\app\kernel8.img D:\ -Force` then re-seat the SD card in the Pi (photos live on the same card under `photos/`)
+- Test:   `wsl bash -lc "cd /mnt/c/Workspace/Personal/Firmware-trial && ./tools/run_host_tests.sh"`  (host unit tests, no hardware)
+- Run (emulator, live SDL window): `wsl bash -lc "export DISPLAY=:0 && bash tools/run_qemu.sh firmware/app/kernel8.img firmware/app/sd.img"`
+- Clean:  `wsl bash -lc "cd .../firmware/app && make clean"`  (do this when headers change)
 
 ## Conventions
 
@@ -40,6 +46,24 @@ _Fill these in once the build system exists. Examples:_
 - No dynamic memory allocation inside interrupt service routines (ISRs).
 - Keep hardware register access behind a HAL/abstraction layer where practical.
 - Document any non-obvious timing, register, or hardware assumptions with a comment.
+
+### Bare-metal rules learned the hard way (full detail in [docs/LEARNINGS.md](docs/LEARNINGS.md))
+
+- **No thread-local storage.** `__thread` / TLS faults on bare metal (`tpidr_el0` is uninitialized).
+  Compile third-party code with TLS disabled (e.g. `STBI_NO_THREAD_LOCALS`).
+- **Don't malloc/free large buffers repeatedly.** Circle's heap leaks blocks >512 KB. Use a fixed
+  pre-allocated pool + reused work buffers for anything big and per-frame/per-photo.
+- **Fullscreen = write the back buffer directly** (`GetBuffer()`, `u32` per pixel). Never `DrawPixel`
+  in a hot loop.
+- **Hardware framebuffer is RGB; QEMU's is BGR.** Hardware is ground truth — expect the emulator to
+  look colour-swapped and don't "fix" it. Build `DEPTH=32`.
+- **Storage is optional / non-fatal.** Init graphics first; always keep an embedded fallback so the
+  frame works with no SD and no USB.
+- **Shared logic is freestanding** (C headers, no `std::`) so it compiles for both host tests and
+  the `-nostdinc++ -fno-exceptions` firmware. Prefer byte-loops over `memset`/`memcpy` (avoids
+  `_FORTIFY_SOURCE` `__*_chk` link errors).
+- **On-hardware debugging = log to SD** (`f_write` + `f_sync` per line) and read the card on a PC.
+  Instrument timings (decode/scale ms, fps) before optimizing.
 
 ## Guardrails (things to always/never do)
 

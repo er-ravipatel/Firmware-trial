@@ -14,7 +14,6 @@ EXTRAINCLUDE = -I ../src -I ../vendor/stb
 
 OBJS = main.o kernel.o \
        ../src/plugins/PhotoFramePlugin.o \
-       ../src/plugins/ClockPlugin.o \
        ../src/content/JpegDecoder.o \
        ../src/content/ExifReader.o \
        ../src/content/stb_image_impl.o

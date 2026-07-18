@@ -9,28 +9,40 @@ display: rotating screen plugins (photo, clock, …). Developed **emulator-first
 
 ---
 
-## ▶ Where we are (works today, verified in QEMU)
-- Boots our own OS with a **visible boot sequence** → runs a modular display.
-- **Plugin architecture**: PluginScheduler rotates ScreenPlugins (photo + clock).
-- **Photo slideshow**: scans SD/USB for `*.jpg`, **cross-fade transitions**, **aspect-fit scaling**
-  (letterbox/pillarbox), **EXIF rotation** (upright phone photos).
-- **JPEG decode** on bare metal via vendored **stb_image**.
-- **Storage**: SD card (EMMC+FatFs) AND **USB pendrive** (USB host + MSD). Tries **USB → SD →
-  embedded** fallback. Storage is optional (boots without either).
-- **Real iPhone photos** displaying (5 HEIC transcoded to JPEG).
-- **21 host unit tests, 376 checks passing** (Result/EventBus/RingBuffer/SHA-256/PluginScheduler/
-  ExifReader).
-- All committed & pushed to GitHub (er-ravipatel/Firmware-trial).
+## 🏷 MILESTONE: v0.2.0-beta "smooth & polished" (2026-07-18)
+Second milestone, still fully **offline**, on real hardware. The per-photo freeze is **gone** (decode
+moved to CPU core 1), the boot is a **modern gradient splash** that dissolves into the slideshow, and
+the intermittent USB-removal reboot is **fixed**. See CHANGELOG `[0.2.0-beta]`. Clean return point.
+(Previous: v0.1.0-beta "offline" — first hardware bring-up; see CHANGELOG `[0.1.0-beta]`.)
 
-## ⏸ PENDING DECISION (this is where we stopped)
-Building **WiFi + web UI**. Key finding (see "Gotchas"): **stock QEMU cannot run Circle
-networking** (usb-net RX is broken; needs a patched QEMU). WiFi can't be emulated at all
-(no CYW43). Three ways forward — pick one on resume:
-- **(A) Build web UI now, test logic on host** — HTTP/HTML/JSON/routing as unit-testable logic;
-  live web+WiFi test on real hardware. *(Recommended — fastest real progress.)*
-- **(B) Build patched QEMU** (larchcone/qemu, ~30 min) to see the web UI live in emulator over
-  Ethernet. WiFi still hardware-only.
-- **(C) Pivot to real hardware** for WiFi + web UI (WiFi needs the Pi anyway).
+## ▶ Where we are (works today, verified on HARDWARE)
+- Boots our own OS → **gradient hero splash** (wordmark + credits, 10 s) → dissolves into the slideshow.
+- **Photo slideshow** is the sole screen (clock plugin removed): scans SD/USB for `*.jpg`, **Fit +
+  blurred background** (whole photo visible, no crop), **gentle Ken Burns**, cross-fade, **EXIF rotation**.
+- **Multicore**: CPU **core 1 decodes the next photo in the background** while core 0 renders at
+  ~40 ms/frame — no more per-photo freeze. Lock-free handshake via GCC atomic builtins; inline fallback.
+- **JPEG decode** on bare metal via vendored **stb_image** (pool allocator; `STBI_NO_THREAD_LOCALS`
+  is the critical bare-metal fix — see Gotchas).
+- **Storage**: SD card (EMMC+FatFs) AND **USB pendrive** (USB host + MSD, hotplug in/out — removal is
+  now crash-free, presence via device-name-service, no I/O on a vanished device). USB → SD → embedded.
+- **SD file logging** (`SD:/lumenlog.txt`): appends across boots with ~1 MB rollover; gated by
+  `logging=on` in `SD:/lumen.conf` (OFF by default = production), force-on for beta/dev builds.
+- **Build identity** in `version.h` (`LUMEN_VERSION`/`LUMEN_MODE`/`LUMEN_BUILD`) shown on the splash.
+- **21 host unit tests, 376 checks passing**.
+
+## ⚠️ BUILD NOTE (multicore): `vendor/circle` is gitignored
+The core-1 decode needs `-DARM_ALLOW_MULTI_CORE` in **`vendor/circle/Config.mk`** (alongside
+`-DNO_SDHOST -DNO_SCREEN_DMA_BURST_LENGTH -DDEPTH=32`), then a **clean rebuild** of Circle:
+`cd vendor/circle && ./makeall clean && ./makeall -j4`, plus clean+rebuild `addon/fatfs` and
+`addon/SDCard`. Because Circle is gitignored, this flag is **not** in the repo — re-apply it after a
+fresh Circle clone or the app won't link (`CMultiCoreSupport` is `#ifdef`-guarded).
+
+## ⏸ WHERE WE STOPPED (next candidates)
+1. **WiFi + web UI (next milestone, "online"):** the big one. Finding (see "Gotchas"): **stock QEMU
+   cannot run Circle networking** (usb-net RX broken; needs patched QEMU); WiFi (CYW43) can't be
+   emulated at all → hardware-only. Approaches: **(A)** build web UI now, unit-test HTTP/JSON logic
+   on host, live-test on hardware *(recommended)*; **(B)** patched QEMU (larchcone) for Ethernet;
+   **(C)** develop directly on the Pi.
 
 ---
 

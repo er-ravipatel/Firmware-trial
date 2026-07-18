@@ -5,8 +5,7 @@
 
 namespace lf {
 
-// Working resolution: decoded photos are downscaled to fit within this (long side) so per-frame
-// sampling is fast and cache-friendly while staying sharp at full-screen (1366px) with zoom.
+// Working resolution: decoded photos are downscaled to fit within this (long side).
 static const unsigned kWorkMax = 1600;
 
 static inline float clampf(float v, float lo, float hi) {
@@ -14,8 +13,7 @@ static inline float clampf(float v, float lo, float hi) {
 }
 static inline float lerpf(float a, float b, float t) { return a + (b - a) * t; }
 
-// Area-average downscale of `src` into the fixed buffer `dst.rgb` (capacity kWorkMax^2*3),
-// preserving aspect within kWorkMax. If src already fits, it is copied. Sets dst.w/dst.h.
+// Area-average downscale of `src` into the fixed buffer `dst.rgb` (capacity kWorkMax^2*3).
 static void downscale_into(const DecodedImage& src, DecodedImage& dst) {
     if (src.rgb == nullptr || src.w == 0 || src.h == 0) {
         dst.w = dst.h = 0;
@@ -23,13 +21,8 @@ static void downscale_into(const DecodedImage& src, DecodedImage& dst) {
     }
     unsigned nw = src.w, nh = src.h;
     if (nw > kWorkMax || nh > kWorkMax) {
-        if (src.w >= src.h) {
-            nw = kWorkMax;
-            nh = (unsigned) ((unsigned long) src.h * kWorkMax / src.w);
-        } else {
-            nh = kWorkMax;
-            nw = (unsigned) ((unsigned long) src.w * kWorkMax / src.h);
-        }
+        if (src.w >= src.h) { nw = kWorkMax; nh = (unsigned)((unsigned long)src.h * kWorkMax / src.w); }
+        else                { nh = kWorkMax; nw = (unsigned)((unsigned long)src.w * kWorkMax / src.h); }
         if (nw == 0) nw = 1;
         if (nh == 0) nh = 1;
     }
@@ -48,14 +41,10 @@ static void downscale_into(const DecodedImage& src, DecodedImage& dst) {
                 unsigned r = 0, g = 0, b = 0, cnt = 0;
                 for (unsigned sy = sy0; sy < sy1; ++sy) {
                     const uint8_t* p = src.rgb + ((unsigned long) sy * src.w + sx0) * 3;
-                    for (unsigned sx = sx0; sx < sx1; ++sx, p += 3) {
-                        r += p[0]; g += p[1]; b += p[2]; ++cnt;
-                    }
+                    for (unsigned sx = sx0; sx < sx1; ++sx, p += 3) { r += p[0]; g += p[1]; b += p[2]; ++cnt; }
                 }
                 uint8_t* d = d0 + ((unsigned long) dy * nw + dx) * 3;
-                d[0] = (uint8_t) (r / cnt);
-                d[1] = (uint8_t) (g / cnt);
-                d[2] = (uint8_t) (b / cnt);
+                d[0] = (uint8_t) (r / cnt); d[1] = (uint8_t) (g / cnt); d[2] = (uint8_t) (b / cnt);
             }
         }
     }
@@ -64,12 +53,28 @@ static void downscale_into(const DecodedImage& src, DecodedImage& dst) {
 }
 
 void PhotoFramePlugin::reset() {
+    bg_drain();                  // stop the worker touching next_ before we reuse the buffers
     index_ = -1;
     next_index_ = -1;
     preloaded_ = false;
+    bg_posted_ = false;
     state_ = State::Empty;
     cur_.w = cur_.h = 0;
     next_.w = next_.h = 0;
+}
+
+// Worker-core service: if core 0 posted a decode job, run it (decode + scale + blur into the
+// next_ buffers) entirely off the render path. Returns true if it decoded something this call.
+bool PhotoFramePlugin::bg_service() {
+    if (!__atomic_load_n(&bg_req_, __ATOMIC_ACQUIRE)) {
+        return false;
+    }
+    __atomic_store_n(&bg_req_, false, __ATOMIC_RELAXED);
+    __atomic_store_n(&bg_busy_, true, __ATOMIC_RELAXED);
+    load(bg_index_, next_, next_bg_);
+    __atomic_store_n(&bg_busy_, false, __ATOMIC_RELAXED);
+    __atomic_store_n(&bg_done_, true, __ATOMIC_RELEASE);   // publishes the buffer writes to core 0
+    return true;
 }
 
 void PhotoFramePlugin::ensure_buffers(unsigned fw, unsigned fh) {
@@ -85,75 +90,121 @@ void PhotoFramePlugin::ensure_buffers(unsigned fw, unsigned fh) {
     }
     if (fbA_) free(fbA_);
     if (fbB_) free(fbB_);
+    if (bgA_) free(bgA_);
+    if (bgB_) free(bgB_);
     fw_ = fw;
     fh_ = fh;
-    fbA_ = (uint8_t*) malloc((unsigned long) fw_ * fh_ * 3);
-    fbB_ = (uint8_t*) malloc((unsigned long) fw_ * fh_ * 3);
+    unsigned long fbsz = (unsigned long) fw_ * fh_ * 3;
+    fbA_ = (uint8_t*) malloc(fbsz);
+    fbB_ = (uint8_t*) malloc(fbsz);
+    bgA_ = (uint8_t*) malloc(fbsz);
+    bgB_ = (uint8_t*) malloc(fbsz);
+    cur_bg_ = bgA_;
+    next_bg_ = bgB_;
 }
 
-void PhotoFramePlugin::load(int idx, DecodedImage& dst) {
+// Build a soft, darkened, full-screen blurred background from `img` (one-time per photo):
+// area-average to a tiny image, then bilinear-upscale to full screen (the upscale is the blur).
+void PhotoFramePlugin::compute_blur(const DecodedImage& img, uint8_t* bg) {
+    const unsigned W = fw_, H = fh_;
+    if (img.rgb == nullptr || img.w == 0 || img.h == 0) {
+        for (unsigned long i = 0; i < (unsigned long) W * H * 3; ++i) bg[i] = 0;
+        return;
+    }
+    const unsigned TW = 48, TH = 27;
+    static uint8_t tiny[TW * TH * 3];
+    for (unsigned ty = 0; ty < TH; ++ty) {
+        unsigned sy0 = (unsigned) ((unsigned long) ty * img.h / TH);
+        unsigned sy1 = (unsigned) ((unsigned long) (ty + 1) * img.h / TH);
+        if (sy1 <= sy0) sy1 = sy0 + 1;
+        for (unsigned tx = 0; tx < TW; ++tx) {
+            unsigned sx0 = (unsigned) ((unsigned long) tx * img.w / TW);
+            unsigned sx1 = (unsigned) ((unsigned long) (tx + 1) * img.w / TW);
+            if (sx1 <= sx0) sx1 = sx0 + 1;
+            unsigned r = 0, g = 0, b = 0, cnt = 0;
+            for (unsigned sy = sy0; sy < sy1; ++sy) {
+                const uint8_t* p = img.rgb + ((unsigned long) sy * img.w + sx0) * 3;
+                for (unsigned sx = sx0; sx < sx1; ++sx, p += 3) { r += p[0]; g += p[1]; b += p[2]; ++cnt; }
+            }
+            uint8_t* d = tiny + (ty * TW + tx) * 3;
+            d[0] = (uint8_t) (r / cnt); d[1] = (uint8_t) (g / cnt); d[2] = (uint8_t) (b / cnt);
+        }
+    }
+    // Bilinear upscale tiny -> bg, darkened so the sharp foreground stands out.
+    for (unsigned oy = 0; oy < H; ++oy) {
+        float fy = (float) oy * (TH - 1) / (H - 1);
+        int y0 = (int) fy; if (y0 >= (int) TH - 1) y0 = TH - 2;
+        float dy = fy - y0;
+        uint8_t* drow = bg + (unsigned long) oy * W * 3;
+        for (unsigned ox = 0; ox < W; ++ox) {
+            float fx = (float) ox * (TW - 1) / (W - 1);
+            int x0 = (int) fx; if (x0 >= (int) TW - 1) x0 = TW - 2;
+            float dx = fx - x0;
+            const uint8_t* p00 = tiny + (y0 * TW + x0) * 3;
+            const uint8_t* p10 = p00 + 3;
+            const uint8_t* p01 = p00 + TW * 3;
+            const uint8_t* p11 = p01 + 3;
+            float w00 = (1 - dx) * (1 - dy), w10 = dx * (1 - dy), w01 = (1 - dx) * dy, w11 = dx * dy;
+            for (int c = 0; c < 3; ++c) {
+                float v = p00[c] * w00 + p10[c] * w10 + p01[c] * w01 + p11[c] * w11;
+                drow[ox * 3 + c] = (uint8_t) (v * 0.55f);   // darken
+            }
+        }
+    }
+}
+
+void PhotoFramePlugin::load(int idx, DecodedImage& dst, uint8_t* bg) {
     const uint8_t* data = nullptr;
     unsigned len = 0;
-    if (photo_count() > 0 && idx >= 0) {
-        data = source_->jpeg(unsigned(idx), len);
-    }
-    if (data == nullptr) {
-        data = lumen_test_jpg;
-        len = lumen_test_jpg_len;
-    }
+    if (photo_count() > 0 && idx >= 0) data = source_->jpeg(unsigned(idx), len);
+    if (data == nullptr) { data = lumen_test_jpg; len = lumen_test_jpg_len; }
 
     unsigned t0 = us();
-    DecodedImage tmp{};                     // pool-backed, transient (valid until next decode)
+    DecodedImage tmp{};
     bool ok = JpegDecoder::decode(data, len, tmp);
     unsigned t1 = us();
     unsigned ow = ok ? tmp.w : 0, oh = ok ? tmp.h : 0;
-    if (ok) {
-        downscale_into(tmp, dst);           // copy/shrink into dst's fixed work buffer
-    } else {
-        dst.w = dst.h = 0;
-    }
+    if (ok) downscale_into(tmp, dst); else dst.w = dst.h = 0;
+    compute_blur(dst, bg);
     unsigned t2 = us();
 
     stats_.index = idx;
     stats_.jpeg_bytes = len;
-    stats_.orig_w = ow;
-    stats_.orig_h = oh;
-    stats_.work_w = dst.w;
-    stats_.work_h = dst.h;
+    stats_.orig_w = ow; stats_.orig_h = oh;
+    stats_.work_w = dst.w; stats_.work_h = dst.h;
     stats_.decode_ms = (t1 - t0) / 1000;
     stats_.scale_ms = (t2 - t1) / 1000;
     stats_pending_ = true;
 }
 
-// Ken Burns: animate zoom + pan over `progress` [0,1], sampled nearest-neighbor (fast; the work
-// image is already area-averaged, so quality holds).
-void PhotoFramePlugin::render_kb(const DecodedImage& img, float progress, int variant,
-                                 uint8_t* dst) {
+// Composite: blurred background everywhere, with the FIT photo (whole image visible) drawn on
+// top via a gentle Ken Burns. Nothing important is cropped; empty space shows the blur.
+void PhotoFramePlugin::render_photo(const DecodedImage& img, const uint8_t* bg, float progress,
+                                    int variant, uint8_t* dst) {
     const unsigned W = fw_, H = fh_;
     if (img.rgb == nullptr || img.w == 0 || img.h == 0) {
-        for (unsigned long i = 0; i < (unsigned long) W * H * 3; ++i) dst[i] = 0;
+        for (unsigned long i = 0; i < (unsigned long) W * H * 3; ++i) dst[i] = bg ? bg[i] : 0;
         return;
     }
     progress = clampf(progress, 0.0f, 1.0f);
 
-    // Gentle zoom, minimal pan — keeps the subject in frame (pan pushed content off-screen).
     float z0, z1, pxs, pys;
     switch (variant & 3) {
         default:
-        case 0: z0 = 1.00f; z1 = 1.08f; pxs =  0.015f; pys =  0.010f; break;
-        case 1: z0 = 1.08f; z1 = 1.00f; pxs = -0.015f; pys = -0.010f; break;
-        case 2: z0 = 1.00f; z1 = 1.07f; pxs = -0.015f; pys =  0.010f; break;
-        case 3: z0 = 1.07f; z1 = 1.00f; pxs =  0.015f; pys = -0.010f; break;
+        case 0: z0 = 1.00f; z1 = 1.06f; pxs =  0.010f; pys =  0.008f; break;
+        case 1: z0 = 1.06f; z1 = 1.00f; pxs = -0.010f; pys = -0.008f; break;
+        case 2: z0 = 1.00f; z1 = 1.05f; pxs = -0.010f; pys =  0.008f; break;
+        case 3: z0 = 1.05f; z1 = 1.00f; pxs =  0.010f; pys = -0.008f; break;
     }
     float z = lerpf(z0, z1, progress);
     float panX = lerpf(-pxs, pxs, progress) * (float) img.w;
     float panY = lerpf(-pys, pys, progress) * (float) img.h;
 
-    // COVER: fill the whole frame (crop overflow).
-    float coverScale = (float) W / img.w;
+    // FIT: whole image visible (letterboxed) at z=1; gentle zoom crops only a few % at edges.
+    float fitScale = (float) W / img.w;
     float s2 = (float) H / img.h;
-    if (s2 > coverScale) coverScale = s2;
-    float invS = 1.0f / (coverScale * z);
+    if (s2 < fitScale) fitScale = s2;
+    float invS = 1.0f / (fitScale * z);
     float srcCx = img.w * 0.5f + panX;
     float srcCy = img.h * 0.5f + panY;
 
@@ -169,19 +220,34 @@ void PhotoFramePlugin::render_kb(const DecodedImage& img, float progress, int va
     for (unsigned oy = 0; oy < H; ++oy, fy += invS_fp) {
         int y0 = (int) (fy >> 16);
         uint8_t* drow = dst + (unsigned long) oy * W * 3;
+        const uint8_t* bgrow = bg + (unsigned long) oy * W * 3;
         long fx = fxBase;
         for (unsigned ox = 0; ox < W; ++ox, fx += invS_fp, drow += 3) {
             int x0 = (int) (fx >> 16);
-            if (x0 < 0 || y0 < 0 || x0 >= iw || y0 >= ih) {
-                drow[0] = drow[1] = drow[2] = 0;
-            } else {
+            if (x0 >= 0 && y0 >= 0 && x0 < iw && y0 < ih) {
                 const uint8_t* p = src + ((unsigned long) y0 * iw + x0) * 3;
-                drow[0] = p[0];
-                drow[1] = p[1];
-                drow[2] = p[2];
+                drow[0] = p[0]; drow[1] = p[1]; drow[2] = p[2];
+            } else {
+                drow[0] = bgrow[ox * 3];       // outside the photo -> blurred background
+                drow[1] = bgrow[ox * 3 + 1];
+                drow[2] = bgrow[ox * 3 + 2];
             }
         }
     }
+}
+
+void PhotoFramePlugin::intro_load() {
+    // Decode photo 0 into cur_/cur_bg_ and render the first sharp frame into fbA_, so the kernel
+    // can build the photo-hero splash. Leaves the plugin ready to continue from photo 0 with no
+    // re-decode (state Showing); the dwell timer starts when on_activate() runs after the intro.
+    unsigned n = photo_count();
+    index_ = (n > 0) ? 0 : -1;
+    cur_variant_ = variant_of(index_ < 0 ? 0 : index_);
+    load(index_, cur_, cur_bg_);
+    render_photo(cur_, cur_bg_, 0.0f, cur_variant_, fbA_);
+    state_ = State::Showing;
+    preloaded_ = false;
+    bg_posted_ = false;
 }
 
 void PhotoFramePlugin::render(ICanvas& canvas) {
@@ -195,34 +261,47 @@ void PhotoFramePlugin::render(ICanvas& canvas) {
     if (state_ == State::Empty) {
         index_ = (n > 0) ? 0 : -1;
         cur_variant_ = variant_of(index_ < 0 ? 0 : index_);
-        load(index_, cur_);
+        load(index_, cur_, cur_bg_);   // first photo: inline (worker not needed yet)
         state_ = State::Showing;
         photo_start_ = t;
         preloaded_ = false;
+        bg_posted_ = false;
     } else if (state_ == State::Showing) {
-        if (n > 1 && !preloaded_ && t - photo_start_ >= kDwellMs / 3) {
+        // Kick off the next photo's decode on the worker core, a third of the way through the
+        // dwell. Core 0 keeps rendering while the worker decodes into next_/next_bg_.
+        if (n > 1 && !bg_posted_ && !preloaded_ && t - photo_start_ >= kDwellMs / 3) {
             next_index_ = (index_ + 1) % int(n);
             next_variant_ = variant_of(next_index_);
-            load(next_index_, next_);
+            bg_request(next_index_);
+            bg_posted_ = true;
+        }
+        // Pick up the finished decode.
+        if (bg_posted_ && !preloaded_ && bg_poll_done()) {
             preloaded_ = true;
         }
-        if (n > 1 && t - photo_start_ >= kDwellMs) {
-            if (!preloaded_) {
-                next_index_ = (index_ + 1) % int(n);
-                next_variant_ = variant_of(next_index_);
-                load(next_index_, next_);
-            }
+        // Safety net: if the worker never ran (multicore unavailable) well past the dwell, decode
+        // inline so the slideshow still advances. Only when the worker is provably idle (no race).
+        if (n > 1 && bg_posted_ && !preloaded_
+            && t - photo_start_ >= kDwellMs + 2500 && !bg_in_flight()) {
+            load(next_index_, next_, next_bg_);
+            preloaded_ = true;
+        }
+        // Begin the fade only once the next photo is ready AND the dwell has elapsed. If it is not
+        // ready yet we simply hold the current photo a little longer — no stutter.
+        if (n > 1 && preloaded_ && t - photo_start_ >= kDwellMs) {
             index_ = next_index_;
             state_ = State::Fading;
             fade_start_ = t;
         }
     } else {  // Fading
         if (t - fade_start_ >= kFadeMs) {
-            DecodedImage tmp = cur_; cur_ = next_; next_ = tmp;   // swap the two work buffers
+            DecodedImage tmpi = cur_; cur_ = next_; next_ = tmpi;
+            uint8_t* tmpb = cur_bg_; cur_bg_ = next_bg_; next_bg_ = tmpb;
             cur_variant_ = next_variant_;
             state_ = State::Showing;
             photo_start_ = fade_start_;
             preloaded_ = false;
+            bg_posted_ = false;
         }
     }
 
@@ -230,14 +309,14 @@ void PhotoFramePlugin::render(ICanvas& canvas) {
     if (state_ == State::Fading) {
         float pOut = (float) (t - photo_start_) / kSpanMs;
         float pIn = (float) (t - fade_start_) / kSpanMs;
-        render_kb(cur_, pOut, cur_variant_, fbA_);
-        render_kb(next_, pIn, next_variant_, fbB_);
+        render_photo(cur_, cur_bg_, pOut, cur_variant_, fbA_);
+        render_photo(next_, next_bg_, pIn, next_variant_, fbB_);
         unsigned alpha = (t - fade_start_) * 256 / kFadeMs;
         if (alpha > 256) alpha = 256;
         canvas.blit_rgb_blend(0, 0, fw_, fh_, fbA_, fbB_, alpha);
     } else {
         float p = (float) (t - photo_start_) / kSpanMs;
-        render_kb(cur_, p, cur_variant_, fbA_);
+        render_photo(cur_, cur_bg_, p, cur_variant_, fbA_);
         canvas.blit_rgb(0, 0, fw_, fh_, fbA_);
     }
 }

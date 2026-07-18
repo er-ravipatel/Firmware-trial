@@ -2,13 +2,62 @@
 // kernel.cpp — Lumen Frame modular display loop (with SD/FatFs photo loading).
 //
 #include "kernel.h"
+#include "version.h"
 #include <circle/timer.h>
 #include <circle/string.h>
+#include <circle/font.h>
 
 static const char FromKernel[] = "kernel";
 
 // Fake time-of-day for scheduling until an RTC/NTP source exists (10:00).
 static const unsigned kNowMin = 600;
+
+// --- Tiny config-file helpers (freestanding: no libc strcmp/tolower) ---
+static inline char lc (char c) { return (c >= 'A' && c <= 'Z') ? (char) (c + 32) : c; }
+
+static boolean streq (const char *a, const char *b)
+{
+    while (*a && *b) { if (*a != *b) return FALSE; a++; b++; }
+    return *a == *b;
+}
+
+// Case-insensitive substring test: does pHay contain pNeedle anywhere?
+static boolean containsCI (const char *pHay, const char *pNeedle)
+{
+    for (const char *h = pHay; *h; ++h)
+    {
+        const char *a = h;
+        const char *b = pNeedle;
+        while (*a && *b && lc (*a) == lc (*b)) { a++; b++; }
+        if (*b == '\0') return TRUE;   // reached end of needle -> matched
+    }
+    return FALSE;
+}
+
+// A beta/dev build forces logging on (see version.h).
+static boolean VersionForcesLog (void)
+{
+    return containsCI (LUMEN_VERSION, "beta") || containsCI (LUMEN_VERSION, "dev");
+}
+
+// 8-bit channel interpolation for the splash gradient (u in 0..255).
+static inline u8 lerp8 (int a, int b, int u) { return (u8) (a + (b - a) * u / 255); }
+
+// Parse a trimmed value token ("on"/"off"/"1"/"0"/"true"/"false"/"yes"/"no").
+static boolean ParseBool (const char *v, boolean bDefault)
+{
+    char w[8];
+    unsigned n = 0;
+    while (v[n] && v[n] != ' ' && v[n] != '\t' && v[n] != '\r' && v[n] != '\n' && v[n] != '#' && n < 7)
+    {
+        w[n] = lc (v[n]);
+        n++;
+    }
+    w[n] = '\0';
+    if (streq (w, "on") || streq (w, "1") || streq (w, "true") || streq (w, "yes")) return TRUE;
+    if (streq (w, "off") || streq (w, "0") || streq (w, "false") || streq (w, "no")) return FALSE;
+    return bDefault;
+}
 
 CKernel::CKernel (void)
 :   m_Timer (&m_Interrupt),
@@ -18,7 +67,7 @@ CKernel::CKernel (void)
     m_Graphics (m_Options.GetWidth (), m_Options.GetHeight (), FALSE),
     m_Canvas (m_Graphics),
     m_ElapsedMs (0),
-    m_Clock (&m_ElapsedMs),
+    m_DecodeCore (&m_Photo, CMemorySystem::Get ()),   // core-1 background decoder
     m_PluginCount (0)
 {
 }
@@ -42,6 +91,13 @@ boolean CKernel::Initialize (void)
     m_USBHCI.Initialize ();   // enumerates a USB pendrive if present
     m_EMMC.Initialize ();     // SD card if present (returns false when absent)
 
+    // Start the secondary cores LAST (Circle requirement). Core 1 becomes the background photo
+    // decoder; a failure is non-fatal (the plugin falls back to inline decode).
+    if (bOK && !m_DecodeCore.Initialize ())
+    {
+        m_Logger.Write (FromKernel, LogWarning, "multicore init failed; decode will run inline");
+    }
+
     return bOK;
 }
 
@@ -51,12 +107,9 @@ void CKernel::SetupPlugins (void)
     m_Photo.set_time_us (&CTimer::GetClockTicks);   // microsecond clock for perf logging
 
     m_Plugins[0] = &m_Photo;
-    m_Scheduler.add ({"photo", true, 90, -1, -1});   // slideshow is the star (~8 photos)
+    m_Scheduler.add ({"photo", true, 90, -1, -1});   // slideshow is the only screen
 
-    m_Plugins[1] = &m_Clock;
-    m_Scheduler.add ({"clock", true, 5, -1, -1});     // brief clock interlude
-
-    m_PluginCount = 2;
+    m_PluginCount = 1;
 }
 
 void CKernel::Activate (int nIndex)
@@ -88,13 +141,173 @@ unsigned CKernel::ScanPhotos (const char *pDrive)
     return 0;
 }
 
-void CKernel::BootMessage (unsigned &nY, const char *pMsg, lf::Rgb Color)
+// Read a boolean key from SD:/lumen.conf. Format: one "key = value" per line, '#' comments.
+// Returns bDefault when the file is missing or the key is not found.
+boolean CKernel::ReadConfigFlag (const char *pKey, boolean bDefault)
 {
-    m_Canvas.text (60, nY, pMsg, Color);
+    FIL File;
+    if (f_open (&File, "SD:/lumen.conf", FA_READ) != FR_OK)
+    {
+        return bDefault;   // no config file -> default (production ships without one)
+    }
+    char Buf[512];
+    UINT nRead = 0;
+    if (f_read (&File, Buf, sizeof (Buf) - 1, &nRead) != FR_OK) nRead = 0;
+    f_close (&File);
+    Buf[nRead] = '\0';
+
+    unsigned nKeyLen = 0;
+    while (pKey[nKeyLen]) nKeyLen++;
+
+    const char *p = Buf;
+    while (*p)
+    {
+        while (*p == ' ' || *p == '\t') p++;          // skip leading indent
+        if (*p == '#')                                // comment -> skip line
+        {
+            while (*p && *p != '\n') p++;
+        }
+        else
+        {
+            boolean bMatch = TRUE;                     // case-insensitive key compare
+            for (unsigned i = 0; i < nKeyLen; i++)
+            {
+                if (lc (p[i]) != lc (pKey[i])) { bMatch = FALSE; break; }
+            }
+            if (bMatch)
+            {
+                const char *q = p + nKeyLen;
+                while (*q == ' ' || *q == '\t') q++;
+                if (*q == '=')
+                {
+                    q++;
+                    while (*q == ' ' || *q == '\t') q++;
+                    return ParseBool (q, bDefault);
+                }
+            }
+            while (*p && *p != '\n') p++;              // advance to next line
+        }
+        if (*p) p++;
+    }
+    return bDefault;
+}
+
+// Centered wordmark ("LUMEN FRAME"), a thin cyan accent rule, and the version — drawn on top of
+// whatever background is already in the back buffer, dimmed by nAlpha (0=invisible..255=full) so
+// it can fade in/out during the splash.
+void CKernel::DrawWordmark (unsigned nAlpha)
+{
+    if (nAlpha > 255) nAlpha = 255;
+    const unsigned W = m_Canvas.width ();
+    const unsigned H = m_Canvas.height ();
+    const unsigned cx = W / 2;
+
+    // Brand wordmark.
+    T2DColor White = COLOR2D (232 * nAlpha / 255, 238 * nAlpha / 255, 246 * nAlpha / 255);
+    m_Graphics.DrawText (cx, H / 2 - 52, White, "LUMEN FRAME",
+                         C2DGraphics::AlignCenter, Font12x22);
+
+    // Thin warm-gold accent rule under the wordmark (harmonizes with the wine/plum gradient).
+    const unsigned bw = 168;
+    m_Canvas.fill_rect (cx - bw / 2, H / 2 - 22, bw, 2,
+                        lf::Rgb { (u8) (232 * nAlpha / 255), (u8) (196 * nAlpha / 255),
+                                  (u8) (138 * nAlpha / 255) });
+
+    // Tagline.
+    T2DColor Soft = COLOR2D (202 * nAlpha / 255, 212 * nAlpha / 255, 226 * nAlpha / 255);
+    m_Graphics.DrawText (cx, H / 2 - 8, Soft, "Memory Lane Walkthrough",
+                         C2DGraphics::AlignCenter, Font8x16);
+
+    // Credits (the major attribution line).
+    T2DColor Warm = COLOR2D (176 * nAlpha / 255, 184 * nAlpha / 255, 196 * nAlpha / 255);
+    m_Graphics.DrawText (cx, H / 2 + 20, Warm,
+                         "Thought by Vikash   &   Guided by Ravi   &   Written by Claude",
+                         C2DGraphics::AlignCenter, Font8x14);
+
+    // Build + mode, small, in the bottom-right corner.
+    CString Meta;
+    Meta.Format ("v%s   |   %s   |   build %s", LUMEN_VERSION, LUMEN_MODE, LUMEN_BUILD);
+    T2DColor Dim = COLOR2D (118 * nAlpha / 255, 130 * nAlpha / 255, 144 * nAlpha / 255);
+    m_Graphics.DrawText (W - 14, H - 18, Dim, (const char *) Meta,
+                         C2DGraphics::AlignRight, Font6x7);
+}
+
+// Boot splash: a rich, opaque diagonal gradient (modern web-hero style) is the background, with
+// the wordmark + tagline + credits on top. It covers the (invisible) SD mount and first-photo
+// decode, holds for the readable dwell, then dissolves straight into the live slideshow. No boot
+// log on screen.
+void CKernel::RunSplashIntro (void)
+{
+    const unsigned W = m_Canvas.width ();
+    const unsigned H = m_Canvas.height ();
+
+    m_Photo.intro_alloc (W, H);              // allocate the plugin's fullscreen buffers (fast)
+    u8 *pGrad = m_Photo.intro_scratch ();    // reuse the spare frame buffer for the gradient
+
+    // Build a rich diagonal 3-stop gradient once (top-left -> bottom-right): deep indigo -> wine
+    // magenta (a bright diagonal band) -> dark plum, with a subtle dither so it stays band-free.
+    for (unsigned y = 0; y < H; y++)
+    {
+        int ty = (H > 1) ? (int) (y * 255 / (H - 1)) : 0;
+        u8 *pRow = pGrad + (unsigned long) y * W * 3;
+        for (unsigned x = 0; x < W; x++)
+        {
+            int tx = (W > 1) ? (int) (x * 255 / (W - 1)) : 0;
+            int t = (tx + ty) / 2;
+            int rr, gg, bb;
+            if (t < 128)
+            {
+                int u = t * 2;                              // deep indigo -> wine magenta
+                rr = lerp8 (28, 132, u); gg = lerp8 (18, 38, u); bb = lerp8 (54, 82, u);
+            }
+            else
+            {
+                int u = (t - 128) * 2;                      // wine magenta -> dark plum
+                rr = lerp8 (132, 34, u); gg = lerp8 (38, 16, u); bb = lerp8 (82, 46, u);
+            }
+            int d = (int) ((x * 13 + y * 7) & 7) - 4;       // +/-4 dither to break banding
+            rr += d; gg += d; bb += d;
+            if (rr < 0) rr = 0; else if (rr > 255) rr = 255;
+            if (gg < 0) gg = 0; else if (gg > 255) gg = 255;
+            if (bb < 0) bb = 0; else if (bb > 255) bb = 255;
+            pRow[x * 3] = (u8) rr; pRow[x * 3 + 1] = (u8) gg; pRow[x * 3 + 2] = (u8) bb;
+        }
+    }
+
+    // Phase A: fade the wordmark in over the gradient (~600 ms).
+    unsigned nStart = CTimer::GetClockTicks () / 1000;
+    for (;;)
+    {
+        unsigned e = CTimer::GetClockTicks () / 1000 - nStart;
+        if (e >= 600) break;
+        m_Canvas.blit_rgb (0, 0, W, H, pGrad);
+        DrawWordmark (e * 255 / 600);
+        m_Canvas.present ();
+    }
+
+    // Hold the full-brightness gradient splash while the first photo decodes (blocks ~0.5-0.9 s).
+    m_Canvas.blit_rgb (0, 0, W, H, pGrad);
+    DrawWordmark (255);
     m_Canvas.present ();
-    m_Logger.Write (FromKernel, LogNotice, "%s", pMsg);   // also to the SD log file
-    nY += 26;
-    CTimer::SimpleMsDelay (350);   // paced so the boot is watchable (log captures everything)
+    m_Photo.intro_load ();
+    const u8 *pSharp = m_Photo.intro_sharp ();   // sharp first slideshow frame
+
+    // Phase C: hold the gradient + wordmark + credits for 10 s (readable, static frame).
+    m_Canvas.blit_rgb (0, 0, W, H, pGrad);
+    DrawWordmark (255);
+    m_Canvas.present ();
+    CTimer::SimpleMsDelay (10000);
+
+    // Phase D: dissolve the gradient into the first photo (~1000 ms) as the wordmark fades out.
+    nStart = CTimer::GetClockTicks () / 1000;
+    for (;;)
+    {
+        unsigned e = CTimer::GetClockTicks () / 1000 - nStart;
+        if (e >= 1000) break;
+        m_Canvas.blit_rgb_blend (0, 0, W, H, pGrad, pSharp, e * 256 / 1000);
+        DrawWordmark (255 - e * 255 / 1000);
+        m_Canvas.present ();
+    }
 }
 
 TShutdownMode CKernel::Run (void)
@@ -102,29 +315,24 @@ TShutdownMode CKernel::Run (void)
     const unsigned W = m_Canvas.width ();
 
     // ---- Set up SD-card file logging FIRST, and retarget the logger to it, so everything
-    // below (incl. any Circle panic/exception) is captured in SD:/lumenlog.txt with f_sync. ----
+    // below (incl. any Circle panic/exception) is captured in SD:/lumenlog.txt with f_sync.
+    // Gated by "logging=on" in SD:/lumen.conf — OFF by default so production frames don't write
+    // to the card every line (dev/testing only). A beta/dev build (see version.h) FORCES it on,
+    // overriding the config, so a developer build is never silent. Serial logging is unaffected. ----
     boolean bSDMounted = (f_mount (&m_FileSystemSD, "SD:", 1) == FR_OK);
-    boolean bLogOpen = bSDMounted && m_FileLog.Open ("SD:/lumenlog.txt");
+    boolean bForced = VersionForcesLog ();                                   // beta/dev overrides config
+    boolean bLogEnabled = bSDMounted && (bForced || ReadConfigFlag ("logging", FALSE));
+    boolean bLogOpen = bLogEnabled && m_FileLog.Open ("SD:/lumenlog.txt");
     if (bLogOpen)
     {
         m_Logger.SetNewTarget (&m_FileLog);
     }
     m_Logger.Write (FromKernel, LogNotice,
-                    "==== Lumen Frame boot ==== SDmount=%d log=%d", (int) bSDMounted, (int) bLogOpen);
+                    "==== Lumen Frame boot ==== ver=%s SDmount=%d forced=%d log=%d",
+                    LUMEN_VERSION, (int) bSDMounted, (int) bForced, (int) bLogOpen);
 
-    // ---- Visible boot sequence (bare metal boots in well under a second; this is paced
-    // on purpose so the steps are watchable on screen) ----
-    m_Canvas.clear (lf::rgb::Navy);
-    m_Canvas.text (60, 54, "LUMEN FRAME", lf::rgb::Cyan);
-    m_Canvas.text (60, 82, "bare-metal firmware OS   (Circle / Pi Zero 2 W)", lf::rgb::White);
-    m_Canvas.fill_rect (60, 110, W - 120, 3, lf::rgb::Cyan);
-    m_Canvas.present ();
-    CTimer::SimpleMsDelay (1000);
-
-    unsigned nY = 144;
-    BootMessage (nY, "[ok]  CPU cores + MMU + framebuffer", lf::rgb::Green);
-
-    // Prefer a USB pendrive; fall back to the SD card; then the embedded image.
+    // ---- Detect the photo source silently (steps go to the SD log, not the screen — the
+    // splash covers boot). Prefer a USB pendrive; fall back to the SD card; then embedded. ----
     unsigned nPhotos = 0;
     const char *pSource = "embedded fallback";
 
@@ -136,40 +344,28 @@ TShutdownMode CKernel::Run (void)
         nPhotos = nUSB;
         pSource = "USB pendrive";
         m_Photo.set_source (&m_PhotoSource);
-        BootMessage (nY, "[ok]  USB pendrive detected", lf::rgb::Green);
     }
-    else
+    else if (bSDMounted)
     {
-        BootMessage (nY, bUSB ? "[--]  USB drive present, no photos"
-                              : "[--]  USB pendrive: not detected", lf::rgb::Yellow);
-
-        if (bSDMounted)   // already mounted at the top for logging
+        nPhotos = ScanPhotos ("SD:");
+        if (nPhotos > 0)
         {
-            nPhotos = ScanPhotos ("SD:");
-            if (nPhotos > 0)
-            {
-                pSource = "SD card";
-                m_Photo.set_source (&m_PhotoSource);
-            }
+            pSource = "SD card";
+            m_Photo.set_source (&m_PhotoSource);
         }
-        BootMessage (nY, bSDMounted ? "[ok]  SD card mounted (FatFs)"
-                                    : "[!!]  SD card mount FAILED", bSDMounted ? lf::rgb::Green : lf::rgb::Red);
     }
 
-    CString PhotoMsg;
-    PhotoMsg.Format ("[ok]  photos: %u   (source: %s)", nPhotos, pSource);
-    BootMessage (nY, (const char *) PhotoMsg, nPhotos ? lf::rgb::Green : lf::rgb::Yellow);
-
-    m_Logger.Write (FromKernel, LogNotice, "Boot: source=%s photos=%u", pSource, nPhotos);
-
-    BootMessage (nY, "[ok]  plugins registered: photo, clock", lf::rgb::Green);
-    BootMessage (nY, ">>>   starting slideshow ...", lf::rgb::White);
-    CTimer::SimpleMsDelay (600);
+    m_Logger.Write (FromKernel, LogNotice, "Boot: source=%s photos=%u res=%ux%u",
+                    pSource, nPhotos, W, m_Canvas.height ());
 
     SetupPlugins ();
 
+    // Beautiful photo-hero splash (covers SD mount + first-photo decode, fades into the slideshow).
+    RunSplashIntro ();
+
     unsigned nSwitchAtMs = CTimer::GetClockTicks () / 1000;
     m_ElapsedMs = nSwitchAtMs;
+    boolean bUsingUSB = (nUSB > 0);   // track current source for hotplug in/out
     Activate (m_Scheduler.next (kNowMin));
 
     // Per-second frame-timing accumulators (all microseconds).
@@ -183,14 +379,37 @@ TShutdownMode CKernel::Run (void)
         // independent), instead of a fixed tick.
         m_ElapsedMs = CTimer::GetClockTicks () / 1000;
 
-        // USB hotplug: pick up a pendrive inserted after boot and switch to it.
+        // USB hotplug: switch to a pendrive when inserted; fall back to the SD when removed.
+        // Decide presence with a name-service lookup (no device I/O). This is the crucial safety
+        // point: doing forced-mount I/O (f_mount "...",1) on a just-removed device RACES with
+        // Circle's plug-and-play teardown and can data-abort (~1-in-7 crash on removal, seen in
+        // the field log). So we only mount/scan on a real *insert* (device confirmed present and
+        // fully enumerated), and on *removal* we touch nothing on the vanished device.
         if (m_USBHCI.UpdatePlugAndPlay ())
         {
-            if (f_mount (&m_FileSystemUSB, "USB:", 1) == FR_OK && ScanPhotos ("USB:") > 0)
+            boolean bUSBpresent = (m_DeviceNameService.GetDevice ("umsd1", TRUE) != 0);
+            if (bUSBpresent && !bUsingUSB)
             {
-                m_Logger.Write (FromKernel, LogNotice, "USB hotplug: switched to %u photos",
-                                m_PhotoSource.count ());
-                m_Photo.set_source (&m_PhotoSource);
+                // Newly inserted and enumerated -> safe to mount + scan.
+                if (f_mount (&m_FileSystemUSB, "USB:", 1) == FR_OK && ScanPhotos ("USB:") > 0)
+                {
+                    m_Logger.Write (FromKernel, LogNotice, "USB inserted: %u photos",
+                                    m_PhotoSource.count ());
+                    m_Photo.set_source (&m_PhotoSource);
+                    bUsingUSB = TRUE;
+                }
+            }
+            else if (!bUSBpresent && bUsingUSB)
+            {
+                // Removed -> release the FatFs volume WITHOUT any USB I/O, then fall back to SD.
+                f_mount (0, "USB:", 0);
+                if (bSDMounted && ScanPhotos ("SD:") > 0)
+                {
+                    m_Logger.Write (FromKernel, LogNotice, "USB removed: back to SD (%u photos)",
+                                    m_PhotoSource.count ());
+                    m_Photo.set_source (&m_PhotoSource);
+                }
+                bUsingUSB = FALSE;
             }
         }
 
@@ -202,19 +421,6 @@ TShutdownMode CKernel::Run (void)
             unsigned r0 = CTimer::GetClockTicks ();
             m_Plugins[nCur]->render (m_Canvas);
             unsigned r1 = CTimer::GetClockTicks ();
-
-            // TEMP color-order test: labeled pure-colour swatches (top-right). The letter says
-            // what the swatch SHOULD be; report what colour you actually see.
-            unsigned sx = m_Canvas.width () - 4 * 44 - 12;
-            m_Canvas.fill_rect (sx,       8, 38, 24, lf::rgb::Red);
-            m_Canvas.fill_rect (sx + 44,  8, 38, 24, lf::rgb::Green);
-            m_Canvas.fill_rect (sx + 88,  8, 38, 24, lf::rgb::Blue);
-            m_Canvas.fill_rect (sx + 132, 8, 38, 24, lf::rgb::White);
-            m_Canvas.text (sx + 14,  36, "R", lf::rgb::White);
-            m_Canvas.text (sx + 58,  36, "G", lf::rgb::White);
-            m_Canvas.text (sx + 102, 36, "B", lf::rgb::White);
-            m_Canvas.text (sx + 146, 36, "W", lf::rgb::Yellow);
-
             m_Canvas.present ();
             unsigned r2 = CTimer::GetClockTicks ();
 
@@ -251,15 +457,20 @@ TShutdownMode CKernel::Run (void)
             }
         }
 
-        unsigned nDurMs = (nCur >= 0) ? m_Scheduler.at (nCur).duration_s * 1000u : 1000u;
-        if (m_ElapsedMs - nSwitchAtMs >= nDurMs)
+        // Rotate plugins only when there is more than one; with the photo slideshow as the sole
+        // screen, re-activating it would needlessly restart its dwell/Ken Burns.
+        if (m_PluginCount > 1)
         {
-            if (nCur >= 0)
+            unsigned nDurMs = (nCur >= 0) ? m_Scheduler.at (nCur).duration_s * 1000u : 1000u;
+            if (m_ElapsedMs - nSwitchAtMs >= nDurMs)
             {
-                m_Plugins[nCur]->on_deactivate ();
+                if (nCur >= 0)
+                {
+                    m_Plugins[nCur]->on_deactivate ();
+                }
+                Activate (m_Scheduler.next (kNowMin));
+                nSwitchAtMs = m_ElapsedMs;
             }
-            Activate (m_Scheduler.next (kNowMin));
-            nSwitchAtMs = m_ElapsedMs;
         }
     }
 

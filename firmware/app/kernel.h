@@ -2,7 +2,7 @@
 // kernel.h — Lumen Frame top-level kernel (bare-metal Circle app).
 //
 // Brings up the framebuffer + SD/FatFs, then runs the modular display: a PluginScheduler
-// rotates ScreenPlugins (photo, clock, ...) onto the CircleCanvas.
+// drives ScreenPlugins (currently the photo slideshow) onto the CircleCanvas.
 //
 #ifndef _kernel_h
 #define _kernel_h
@@ -17,6 +17,7 @@
 #include <circle/logger.h>
 #include <circle/2dgraphics.h>
 #include <circle/types.h>
+#include <circle/memory.h>
 #include <circle/usb/usbhcidevice.h>
 #include <SDCard/emmc.h>
 #include <fatfs/ff.h>
@@ -24,9 +25,9 @@
 #include "CircleCanvas.h"
 #include "FileLogDevice.h"
 #include "SdPhotoSource.h"
+#include "DecodeCore.h"
 #include "app/PluginScheduler.h"       // via EXTRAINCLUDE=-I../src
 #include "plugins/PhotoFramePlugin.h"
-#include "plugins/ClockPlugin.h"
 
 enum TShutdownMode
 {
@@ -47,8 +48,12 @@ public:
 private:
     void SetupPlugins (void);
     void Activate (int nIndex);
-    void BootMessage (unsigned &nY, const char *pMsg, lf::Rgb Color);
+    void RunSplashIntro (void);              // photo-hero boot splash (fades into the first photo)
+    void DrawWordmark (unsigned nAlpha);     // centered LUMEN FRAME + accent + version, alpha 0..255
     unsigned ScanPhotos (const char *pDrive);   // scans photos/ then images/ then root
+    // Read a boolean key from SD:/lumen.conf (key=on/off/1/0/true/false). Returns bDefault when
+    // the file or key is absent. Used to keep diagnostics OFF in production builds by default.
+    boolean ReadConfigFlag (const char *pKey, boolean bDefault);
 
     // do not change this order
     CActLED            m_ActLED;
@@ -68,11 +73,11 @@ private:
     FATFS              m_FileSystemUSB;
     CFileLogDevice     m_FileLog;
     CSdPhotoSource     m_PhotoSource;
-    u32                m_ElapsedMs;     // before m_Clock (which holds &m_ElapsedMs)
+    u32                m_ElapsedMs;     // animation clock (ms since boot)
 
     lf::PluginScheduler<8> m_Scheduler;
     lf::PhotoFramePlugin   m_Photo;
-    lf::ClockPlugin        m_Clock;
+    CDecodeCore            m_DecodeCore;   // core-1 background JPEG decoder (must follow m_Photo)
     lf::ScreenPlugin      *m_Plugins[8];
     unsigned               m_PluginCount;
 };
