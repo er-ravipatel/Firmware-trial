@@ -151,10 +151,25 @@ unsigned CKernel::ScanPhotos (const char *pDrive)
     {
         CString Dir;
         Dir.Format ("%s%s", pDrive, s_Subs[i]);
+        unsigned t0 = CTimer::GetClockTicks ();
         m_PhotoSource.Scan ((const char *) Dir);
-        if (m_PhotoSource.count () > 0)
+        unsigned nMs = (CTimer::GetClockTicks () - t0) / (CLOCKHZ / 1000);
+        unsigned n = m_PhotoSource.count ();
+        m_Logger.Write (FromKernel, LogNotice,
+                        "scan '%s' -> %u files (%u need convert) in %u ms%s", (const char *) Dir,
+                        n, m_PhotoSource.convert_count (), nMs,
+                        m_PhotoSource.truncated () ? "  [CAPPED at kMaxPhotos]" : "");
+        // List only the first few names: a 10k-photo drive must not flood the SD log.
+        static const unsigned kListMax = 12;
+        for (unsigned k = 0; k < n && k < kListMax; k++)
+            m_Logger.Write (FromKernel, LogNotice, "  [%u] %s%s", k,
+                            m_PhotoSource.name (k),
+                            m_PhotoSource.needs_convert (k) ? "  (needs convert)" : "");
+        if (n > kListMax)
+            m_Logger.Write (FromKernel, LogNotice, "  ... and %u more", n - kListMax);
+        if (n > 0)
         {
-            return m_PhotoSource.count ();
+            return n;
         }
     }
     return 0;
@@ -695,9 +710,19 @@ TShutdownMode CKernel::Run (void)
             if (m_Photo.take_load_stats (ls))
             {
                 m_Logger.Write (FromKernel, LogNotice,
-                    "load: photo=%d bytes=%u orig=%ux%u work=%ux%u decode=%ums scale=%ums",
-                    ls.index, ls.jpeg_bytes, ls.orig_w, ls.orig_h, ls.work_w, ls.work_h,
-                    ls.decode_ms, ls.scale_ms);
+                    "load: photo=%d name='%s' type=%s bytes=%u (%u KB) orig=%ux%u work=%ux%u "
+                    "decode=%ums scale=%ums%s",
+                    ls.index, ls.name, ls.type, ls.jpeg_bytes, (ls.jpeg_bytes + 512) / 1024,
+                    ls.orig_w, ls.orig_h, ls.work_w, ls.work_h,
+                    ls.decode_ms, ls.scale_ms, ls.ok ? "" : "  DECODE FAILED");
+            }
+
+            // Log when a slide actually comes on screen (decode happens ahead of display).
+            lf::PhotoFramePlugin::ShowInfo si;
+            if (m_Photo.take_show_event (si))
+            {
+                m_Logger.Write (FromKernel, LogNotice, "show: photo=%d name='%s'%s",
+                    si.index, si.name, si.convert ? " (needs-convert QR slide)" : "");
             }
 
             // Log per-second frame-timing aggregate.

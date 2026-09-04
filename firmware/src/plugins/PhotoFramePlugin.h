@@ -61,11 +61,21 @@ public:
     bool bg_service();   // called repeatedly by the worker core; returns true if it did work
 
     // --- Perf instrumentation (read by the kernel for logging) ---
+    static const unsigned kNameMax = 48;   // file name kept for logging (truncated if longer)
     struct LoadStats {
         int index = -1;
+        char name[kNameMax] = {0};        // file name (no path); "" for the embedded fallback
+        const char* type = "";            // container sniffed from the bytes: jpeg/png/gif/...
         unsigned jpeg_bytes = 0;
         unsigned orig_w = 0, orig_h = 0, work_w = 0, work_h = 0;
         unsigned decode_ms = 0, scale_ms = 0;
+        bool ok = false;                  // decode succeeded
+    };
+    // Fired when a slide becomes the on-screen one (first show, fade start, or QR hard-cut).
+    struct ShowInfo {
+        int index = -1;
+        char name[kNameMax] = {0};
+        bool convert = false;             // true = needs-convert QR placeholder, not a photo
     };
     void set_time_us(unsigned (*fn)()) { time_us_ = fn; }   // microsecond clock for measuring
     bool take_load_stats(LoadStats& out) {                  // true (and clears) if new stats
@@ -74,6 +84,14 @@ public:
         stats_pending_ = false;
         return true;
     }
+    bool take_show_event(ShowInfo& out) {                   // true (and clears) if a new slide showed
+        if (!show_pending_) return false;
+        out = show_;
+        show_pending_ = false;
+        return true;
+    }
+    // Sniff the image container from its leading bytes (freestanding; no decoder involved).
+    static const char* sniff_format(const uint8_t* data, unsigned len);
     bool is_transitioning() const { return state_ == State::Fading; }
 
 private:
@@ -90,6 +108,17 @@ private:
     void draw_qr(ICanvas& canvas, const char* text, unsigned cx, unsigned cy, unsigned mod);
     bool index_needs_convert(int idx) const { return source_ && idx >= 0 && source_->needs_convert(unsigned(idx)); }
     const char* index_name(int idx) const { return (source_ && idx >= 0) ? source_->name(unsigned(idx)) : ""; }
+    static void copy_name(char* dst, const char* src) {   // bounded copy, byte loop (freestanding)
+        unsigned k = 0;
+        for (; src && src[k] && k + 1 < kNameMax; ++k) dst[k] = src[k];
+        dst[k] = '\0';
+    }
+    void note_show(int idx, bool convert) {               // record "slide idx is now on screen"
+        show_.index = idx;
+        copy_name(show_.name, index_name(idx));
+        show_.convert = convert;
+        show_pending_ = true;
+    }
 
     unsigned now() const { return ms_ ? *ms_ : 0; }
     unsigned photo_count() const { return source_ ? source_->count() : 0; }
@@ -160,6 +189,8 @@ private:
     unsigned us() const { return time_us_ ? time_us_() : 0; }
     LoadStats stats_{};
     bool stats_pending_ = false;
+    ShowInfo show_{};
+    bool show_pending_ = false;
 };
 
 }  // namespace lf

@@ -156,11 +156,24 @@ void PhotoFramePlugin::compute_blur(const DecodedImage& img, uint8_t* bg) {
     }
 }
 
+const char* PhotoFramePlugin::sniff_format(const uint8_t* d, unsigned len) {
+    if (d == nullptr || len < 12) return "unknown";
+    if (d[0] == 0xFF && d[1] == 0xD8 && d[2] == 0xFF) return "jpeg";
+    if (d[0] == 0x89 && d[1] == 'P' && d[2] == 'N' && d[3] == 'G') return "png";
+    if (d[0] == 'G' && d[1] == 'I' && d[2] == 'F' && d[3] == '8') return "gif";
+    if (d[0] == 'B' && d[1] == 'M') return "bmp";
+    if (d[0] == 'R' && d[1] == 'I' && d[2] == 'F' && d[3] == 'F'
+        && d[8] == 'W' && d[9] == 'E' && d[10] == 'B' && d[11] == 'P') return "webp";
+    if (d[4] == 'f' && d[5] == 't' && d[6] == 'y' && d[7] == 'p') return "heic";   // ISO-BMFF box
+    return "unknown";
+}
+
 void PhotoFramePlugin::load(int idx, DecodedImage& dst, uint8_t* bg) {
     const uint8_t* data = nullptr;
     unsigned len = 0;
     if (photo_count() > 0 && idx >= 0) data = source_->jpeg(unsigned(idx), len);
-    if (data == nullptr) { data = lumen_test_jpg; len = lumen_test_jpg_len; }
+    bool embedded = (data == nullptr);
+    if (embedded) { data = lumen_test_jpg; len = lumen_test_jpg_len; }
 
     unsigned t0 = us();
     DecodedImage tmp{};
@@ -172,6 +185,9 @@ void PhotoFramePlugin::load(int idx, DecodedImage& dst, uint8_t* bg) {
     unsigned t2 = us();
 
     stats_.index = idx;
+    copy_name(stats_.name, embedded ? "(embedded)" : index_name(idx));
+    stats_.type = sniff_format(data, len);
+    stats_.ok = ok;
     stats_.jpeg_bytes = len;
     stats_.orig_w = ow; stats_.orig_h = oh;
     stats_.work_w = dst.w; stats_.work_h = dst.h;
@@ -258,6 +274,7 @@ void PhotoFramePlugin::intro_load() {
     state_ = State::Showing;
     preloaded_ = false;
     bg_posted_ = false;
+    note_show(index_, cur_convert_);
 }
 
 void PhotoFramePlugin::set_convert_qr(const char* payload) {
@@ -317,20 +334,21 @@ void PhotoFramePlugin::render_convert_slide(ICanvas& canvas, const char* filenam
     unsigned y = qcy + qdim / 2 + 16;
 
     if (!connected && convert_hint_[0]) {
-        // Step 1 — join the frame's Wi-Fi (QR encodes an open-network join).
+        // Not on the AP yet — show the Wi-Fi-join QR (encodes an open-network join).
         char wifi[80]; unsigned k = 0;
         for (const char* p = "WIFI:S:"; *p && k + 1 < sizeof wifi; ++p) wifi[k++] = *p;
         for (const char* p = convert_hint_; *p && k + 1 < sizeof wifi; ++p) wifi[k++] = *p;
         for (const char* p = ";T:nopass;;"; *p && k + 1 < sizeof wifi; ++p) wifi[k++] = *p;
         wifi[k] = '\0';
         draw_qr(canvas, wifi, W / 2, qcy, mod);
-        ctext("Step 1 of 2  -  Scan to join Wi-Fi", y, dim);   y += 22;
+        ctext("Scan to join the frame's Wi-Fi", y, dim);   y += 22;
         ctext(convert_hint_, y, accent);
     } else {
-        // Step 2 — phone is on the AP (or no SSID to show): scan to open the converter.
+        // Phone is on the AP (or no SSID to show): show the converter QR. No "step 2" label — an
+        // already-connected phone jumps straight here and never saw a "step 1".
         draw_qr(canvas, qr_payload_, W / 2, qcy, mod);
-        if (connected) { ctext("Connected  -  Step 2 of 2", y, ok); y += 22; }
-        ctext("Scan to open the converter", y, dim);
+        if (connected) { ctext("Connected", y, ok); y += 22; }
+        ctext("Scan to convert this photo", y, dim);
     }
 
     if (filename && filename[0]) ctext(filename, qcy + qdim / 2 + 66, faint);
@@ -353,6 +371,7 @@ void PhotoFramePlugin::render(ICanvas& canvas) {
         photo_start_ = t;
         preloaded_ = false;
         bg_posted_ = false;
+        note_show(index_, cur_convert_);
     } else if (state_ == State::Showing) {
         // Kick off the next slide a third of the way through the dwell. A needs-convert slide has
         // nothing to decode — it's a QR placeholder — so mark it ready immediately.
@@ -387,9 +406,11 @@ void PhotoFramePlugin::render(ICanvas& canvas) {
                 photo_start_ = t;
                 preloaded_ = false;
                 bg_posted_ = false;
+                note_show(index_, cur_convert_);          // hard-cut: new slide is on screen now
             } else {
                 state_ = State::Fading;
                 fade_start_ = t;
+                note_show(index_, false);                 // fade-in begins: photo is appearing
             }
         }
     } else {  // Fading (photos only — convert slides hard-cut)

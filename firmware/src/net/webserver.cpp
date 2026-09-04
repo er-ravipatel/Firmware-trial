@@ -239,7 +239,7 @@ void CWebServer::SaveJpg (CSocket *pConn, const char *pQuery, const u8 *pBody, u
 	const char *pSrc = (m_pPhotos && i >= 0) ? m_pPhotos->path ((unsigned) i) : "";
 	if (pSrc[0] == '\0' || nBodyLen == 0) { SendHead (pConn, "400 Bad Request", "text/plain", 0); return; }
 
-	char tgt[80]; unsigned k = 0, dot = 0;
+	char tgt[144]; unsigned k = 0, dot = 0;   // >= CSdPhotoSource::kMaxPath + ".jpg"
 	for (; pSrc[k] && k + 5 < sizeof tgt; k++) { tgt[k] = pSrc[k]; if (pSrc[k] == '.') dot = k; }
 	if (dot == 0) dot = k;
 	tgt[dot] = '.'; tgt[dot + 1] = 'j'; tgt[dot + 2] = 'p'; tgt[dot + 3] = 'g'; tgt[dot + 4] = '\0';

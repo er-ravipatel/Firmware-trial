@@ -197,3 +197,16 @@ it never bites you the same way twice. Promote the durable ones into
   (needs internet); build `libwlan.a` (`make` in `addon/wlan`). SoftAP: `m_WLAN.Initialize()` →
   `CreateOpenNet(ssid, channel, hidden)` → `CNetSubSystem(...NetDeviceTypeWLAN)`. **Unemulatable —
   hardware-only.** Spike W1 PASSED on the real Zero 2 W (firmware ready, MAC up, AP visible).
+
+### v0.3 — large photo libraries (2026-09-04)
+
+- **2026-09-04 — `CKernel` lives on the 128 KB kernel stack; big tables must be heap-allocated once.**
+  Context: a 10k-photo pendrive showed only the first 64 files because `CSdPhotoSource` kept a fixed
+  `m_Paths[64][64]` inline, and it could not simply be enlarged — `CKernel Kernel;` is a local in
+  `main()` on Circle's `KERNEL_STACK_SIZE` (0x20000) stack, so a 1.5 MB member array would overflow
+  it silently. Rule: **any table beyond a few KB inside the kernel object is a one-time `malloc` on
+  first use, never freed** (freeing > 512 KB leaks anyway). Same for the per-photo file buffer:
+  a fixed 32 MB buffer allocated once replaced `malloc(size)`/`free` per photo, which leaked every
+  full-size (> 512 KB) camera JPEG until the frame ran out of RAM and rebooted — which *also* looks
+  like "only a few photos in a loop". Scan recurses sub-folders (depth 4) and logs only the first 12
+  names plus a count, so a 10k drive cannot flood the SD log. Verified in QEMU with a 300-file USB image.
