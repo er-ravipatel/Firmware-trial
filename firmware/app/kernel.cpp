@@ -711,10 +711,11 @@ TShutdownMode CKernel::Run (void)
             {
                 m_Logger.Write (FromKernel, LogNotice,
                     "load: photo=%d name='%s' type=%s bytes=%u (%u KB) orig=%ux%u work=%ux%u "
-                    "decode=%ums scale=%ums%s",
+                    "decode=%ums scale=%ums%s%s",
                     ls.index, ls.name, ls.type, ls.jpeg_bytes, (ls.jpeg_bytes + 512) / 1024,
                     ls.orig_w, ls.orig_h, ls.work_w, ls.work_h,
-                    ls.decode_ms, ls.scale_ms, ls.ok ? "" : "  DECODE FAILED");
+                    ls.decode_ms, ls.scale_ms,
+                    ls.ok ? "" : "  DECODE FAILED: ", ls.ok ? "" : ls.err);
             }
 
             // Log when a slide actually comes on screen (decode happens ahead of display).
@@ -725,9 +726,9 @@ TShutdownMode CKernel::Run (void)
                     si.index, si.name, si.convert ? " (needs-convert QR slide)" : "");
             }
 
-            // Log per-second frame-timing aggregate.
+            // Log the frame-timing aggregate every 10 s (was 1 s: a 10 h run wrote 36k lines).
             unsigned nWin = m_ElapsedMs - nStatStartMs;
-            if (nWin >= 1000 && nFrames > 0)
+            if (nWin >= 10000 && nFrames > 0)
             {
                 m_Logger.Write (FromKernel, LogNotice,
                     "perf: fps=%u frame_avg=%uus render_avg=%uus render_max=%uus "

@@ -6,10 +6,17 @@
 // Circle's heap does NOT reclaim freed blocks larger than 512 KB, so repeatedly malloc/free-ing
 // multi-MB decode buffers leaks the heap until "Out of memory". Instead, stb allocates from one
 // big pool (grabbed once from the heap) that we RESET before every decode. Frees are no-ops.
-#define LF_POOL_SIZE (96u * 1024u * 1024u)   // handles up to ~30 MP decodes
+// Bump allocator: stb's freed intermediates are NOT reused within one decode. Budget per decode is
+// ~1.5 B/px raw planes (4:2:0) + 3 B/px RGB out + 3 B/px more if EXIF-rotated = up to 7.5 B/px.
+// 96 MB failed every 24 MP file on the owner's drive (field log 2026-09-05, 362 such files);
+// 192 MB covers 24 MP incl. portrait/rotated. Larger (48-64 MP phone shots) are rejected up front
+// by JpegDecoder's header check — see lf_pool_size().
+#define LF_POOL_SIZE (192u * 1024u * 1024u)
 
 static uint8_t* g_pool = 0;
 static size_t   g_pool_off = 0;
+
+size_t lf_pool_size(void) { return LF_POOL_SIZE; }
 
 static void lf_pool_init(void) {
     if (g_pool == 0) {

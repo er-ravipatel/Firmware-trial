@@ -210,3 +210,21 @@ it never bites you the same way twice. Promote the durable ones into
   full-size (> 512 KB) camera JPEG until the frame ran out of RAM and rebooted — which *also* looks
   like "only a few photos in a loop". Scan recurses sub-folders (depth 4) and logs only the first 12
   names plus a count, so a 10k drive cannot flood the SD log. Verified in QEMU with a 300-file USB image.
+
+- **2026-09-05 — Size the decode pool for the biggest camera on the card, and reject the rest from
+  the header.** Context: the first 10 h field log on an 8,222-photo drive showed 80 `DECODE FAILED`
+  lines — all 6000×4000 (24 MP) from one DSLR; the drive also holds 26 files of 32–64 MP (phone
+  "high-res" shots) not yet reached. stb is a bump-pool consumer here: ~1.5 B/px raw planes + 3 B/px
+  RGB out + 3 B/px more when EXIF-rotated → a 24 MP portrait needs ~180 MB, so the 96 MB pool was
+  always going to fail it, after ~2.2 s of wasted core-1 time. Rule: **pool = 192 MB** (covers 24 MP
+  incl. rotation; heap still ~170 MB free), and **pre-check the header with `stbi_info_from_memory`**
+  so anything the pool can't hold is rejected in microseconds with a logged reason (`too large for
+  decode pool`, `bad header`). The slideshow **skips** an undecodable file immediately instead of
+  showing a dark slide for a dwell (bounded to 64 consecutive skips). Verified on the host against
+  the real DSC_0483.JPG (24 MP, now OK) and 20220419_225232.jpg (64 MP, rejected), then in QEMU.
+  The 64 MP class still needs downsizing off-device (`tools/_resize_dir.sh`) or the phone converter.
+
+- **2026-09-05 — A boot-time log cap is not a cap.** Context: `lumenlog.txt` reached 6.3 MB against a
+  1 MB cap because the rollover check ran only in `Open()`, and the per-second `perf:` line wrote
+  36k lines in 10 h. Rule: check `f_size` every N writes and rotate mid-run; log aggregates every
+  10 s, not every second.

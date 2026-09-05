@@ -70,6 +70,7 @@ public:
         unsigned orig_w = 0, orig_h = 0, work_w = 0, work_h = 0;
         unsigned decode_ms = 0, scale_ms = 0;
         bool ok = false;                  // decode succeeded
+        const char* err = "";             // why not (static text from JpegDecoder), "" if ok
     };
     // Fired when a slide becomes the on-screen one (first show, fade start, or QR hard-cut).
     struct ShowInfo {
@@ -159,6 +160,8 @@ private:
     bool bg_posted_ = false;     // core 0: a background decode job is outstanding
     bool cur_convert_ = false;   // is the current slide a needs-convert placeholder (show QR)?
     bool next_convert_ = false;
+    unsigned skips_ = 0;         // consecutive undecodable files skipped while picking the next slide
+    static const unsigned kMaxSkips = 64;   // give up skipping (show the dark slide) after this many
     char qr_payload_[80] = {0};  // URL drawn as a QR on convert slides (opens the phone's browser)
     char convert_hint_[48] = {0};// Wi-Fi SSID shown on convert slides ("join this network first")
     const volatile bool* net_ready_ = nullptr;  // -> g_dhcpClientConnected (a phone has joined)

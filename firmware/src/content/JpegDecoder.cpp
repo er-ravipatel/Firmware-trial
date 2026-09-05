@@ -7,12 +7,25 @@
 extern "C" {
 unsigned char* stbi_load_from_memory(const unsigned char* buffer, int len,
                                      int* x, int* y, int* channels_in_file, int desired_channels);
-void  lf_pool_reset(void);
-void* lf_pool_alloc(size_t n);
+int    stbi_info_from_memory(const unsigned char* buffer, int len, int* x, int* y, int* comp);
+void   lf_pool_reset(void);
+void*  lf_pool_alloc(size_t n);
+size_t lf_pool_size(void);
 }
 
 namespace lf {
 namespace {
+
+const char* s_last_error = "";
+unsigned    s_hdr_w = 0, s_hdr_h = 0;
+
+// Pool bytes a decode will need: stb keeps whole-image raw planes (~1.5 B/px for 4:2:0 chroma,
+// up to 3 B/px for 4:4:4) plus the 3 B/px RGB output, plus another 3 B/px if we must rotate.
+// Estimate with the common 4:2:0 case; the pool's own out-of-space check is the backstop.
+size_t estimate_pool_need(unsigned w, unsigned h, bool rotated) {
+    size_t px = (size_t) w * h;
+    return px * 3 / 2 + px * 3 + (rotated ? px * 3 : 0) + (1u << 20);
+}
 
 // Apply EXIF orientation into a fresh pool buffer.
 uint8_t* apply_orientation(const uint8_t* src, unsigned w, unsigned h, int orient,
@@ -48,14 +61,30 @@ uint8_t* apply_orientation(const uint8_t* src, unsigned w, unsigned h, int orien
 
 bool JpegDecoder::decode(const uint8_t* data, unsigned len, DecodedImage& out) {
     lf_pool_reset();   // reclaim the previous decode's pool memory (already consumed by caller)
+    s_last_error = "";
+    s_hdr_w = s_hdr_h = 0;
 
+    // Header-only pre-check (microseconds): reject an image the pool can't hold BEFORE spending
+    // seconds decoding it only to fail at the output allocation (64 MP phone shots do exactly that).
     int w = 0, h = 0, comp = 0;
-    unsigned char* px = stbi_load_from_memory(data, static_cast<int>(len), &w, &h, &comp, 3);
-    if (px == nullptr || w <= 0 || h <= 0) {
+    if (!stbi_info_from_memory(data, static_cast<int>(len), &w, &h, &comp) || w <= 0 || h <= 0) {
+        s_last_error = "bad header";
+        return false;
+    }
+    s_hdr_w = unsigned(w);
+    s_hdr_h = unsigned(h);
+    int orient = ExifReader::orientation(data, len);
+    if (estimate_pool_need(unsigned(w), unsigned(h), orient != 1) > lf_pool_size()) {
+        s_last_error = "too large for decode pool";
         return false;
     }
 
-    int orient = ExifReader::orientation(data, len);
+    unsigned char* px = stbi_load_from_memory(data, static_cast<int>(len), &w, &h, &comp, 3);
+    if (px == nullptr || w <= 0 || h <= 0) {
+        s_last_error = "decode failed";
+        return false;
+    }
+
     if (orient != 1) {
         unsigned ow = 0, oh = 0;
         uint8_t* rotated = apply_orientation(px, unsigned(w), unsigned(h), orient, ow, oh);
@@ -71,6 +100,10 @@ bool JpegDecoder::decode(const uint8_t* data, unsigned len, DecodedImage& out) {
     out.rgb = px;
     return true;
 }
+
+const char* JpegDecoder::last_error()    { return s_last_error; }
+unsigned    JpegDecoder::last_header_w() { return s_hdr_w; }
+unsigned    JpegDecoder::last_header_h() { return s_hdr_h; }
 
 void JpegDecoder::free_image(DecodedImage& img) {
     // Pool-managed: memory is reclaimed by lf_pool_reset() before the next decode. Just detach.

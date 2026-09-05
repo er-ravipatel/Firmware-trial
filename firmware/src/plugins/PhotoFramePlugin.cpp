@@ -179,7 +179,9 @@ void PhotoFramePlugin::load(int idx, DecodedImage& dst, uint8_t* bg) {
     DecodedImage tmp{};
     bool ok = JpegDecoder::decode(data, len, tmp);
     unsigned t1 = us();
-    unsigned ow = ok ? tmp.w : 0, oh = ok ? tmp.h : 0;
+    // On failure still report the header dimensions so the log shows WHAT was too big.
+    unsigned ow = ok ? tmp.w : JpegDecoder::last_header_w();
+    unsigned oh = ok ? tmp.h : JpegDecoder::last_header_h();
     if (ok) downscale_into(tmp, dst); else dst.w = dst.h = 0;
     compute_blur(dst, bg);
     unsigned t2 = us();
@@ -188,6 +190,7 @@ void PhotoFramePlugin::load(int idx, DecodedImage& dst, uint8_t* bg) {
     copy_name(stats_.name, embedded ? "(embedded)" : index_name(idx));
     stats_.type = sniff_format(data, len);
     stats_.ok = ok;
+    stats_.err = ok ? "" : JpegDecoder::last_error();
     stats_.jpeg_bytes = len;
     stats_.orig_w = ow; stats_.orig_h = oh;
     stats_.work_w = dst.w; stats_.work_h = dst.h;
@@ -265,6 +268,15 @@ void PhotoFramePlugin::intro_load() {
     cur_convert_ = index_needs_convert(index_);
     if (!cur_convert_) {
         load(index_, cur_, cur_bg_);
+        // First file undecodable? Walk forward (bounded) so the splash isn't a black photo.
+        for (unsigned k = 0; cur_.w == 0 && !cur_convert_ && n > 1 && k < 8; ++k) {
+            index_ = (index_ + 1) % int(n);
+            cur_variant_ = variant_of(index_);
+            cur_convert_ = index_needs_convert(index_);
+            if (!cur_convert_) load(index_, cur_, cur_bg_);
+        }
+    }
+    if (!cur_convert_) {
         render_photo(cur_, cur_bg_, 0.0f, cur_variant_, fbA_);
     } else {
         // First file is a needs-convert placeholder: dissolve into black, then the loop shows the QR.
@@ -386,6 +398,18 @@ void PhotoFramePlugin::render(ICanvas& canvas) {
         if (bg_posted_ && !preloaded_ && bg_poll_done()) {
             preloaded_ = true;
         }
+        // The preloaded photo failed to decode (w == 0): it would sit on screen as a dark slide
+        // for a whole dwell. Skip straight to the following file instead (bounded, so a drive
+        // full of undecodable files can't spin forever).
+        if (preloaded_ && !next_convert_ && next_.w == 0 && n > 1 && skips_ < kMaxSkips) {
+            next_index_ = (next_index_ + 1) % int(n);
+            next_variant_ = variant_of(next_index_);
+            next_convert_ = index_needs_convert(next_index_);
+            preloaded_ = next_convert_;             // a QR slide has nothing to decode
+            if (!next_convert_) bg_request(next_index_);
+            bg_posted_ = true;
+            skips_++;
+        }
         // Safety net: if the worker never ran (multicore unavailable) well past the dwell, decode
         // inline so the slideshow still advances. Only when the worker is provably idle (no race).
         if (n > 1 && !next_convert_ && bg_posted_ && !preloaded_
@@ -397,6 +421,7 @@ void PhotoFramePlugin::render(ICanvas& canvas) {
         // hard-cut when a QR/convert slide is involved (there is no image to blend).
         if (n > 1 && preloaded_ && t - photo_start_ >= kDwellMs) {
             index_ = next_index_;
+            skips_ = 0;
             if (cur_convert_ || next_convert_) {
                 DecodedImage tmpi = cur_; cur_ = next_; next_ = tmpi;
                 uint8_t* tmpb = cur_bg_; cur_bg_ = next_bg_; next_bg_ = tmpb;

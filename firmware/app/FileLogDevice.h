@@ -22,25 +22,16 @@ public:
 
     boolean Open (const char *pPath)
     {
+        m_Path = pPath;
+
         // Roll over if the existing log is already large: keep it as "<path>.old" (one
         // generation), then start a fresh file. New content is appended otherwise.
         FILINFO fi;
         if (f_stat (pPath, &fi) == FR_OK && fi.fsize >= kMaxBytes)
         {
-            CString OldFull, OldRel;
-            OldFull.Format ("%s.old", pPath);               // full path (with drive) for f_unlink
-            OldRel.Format ("%s.old", DriveRelative (pPath)); // drive-relative for f_rename's new name
-            f_unlink ((const char *) OldFull);              // drop the previous .old (ignore errors)
-            f_rename (pPath, (const char *) OldRel);        // current -> .old  (ignore errors)
+            RotateFiles ();
         }
-
-        // FA_OPEN_APPEND opens-or-creates and seeks to end, so writes extend the file.
-        if (f_open (&m_File, pPath, FA_WRITE | FA_OPEN_APPEND) != FR_OK)
-        {
-            return FALSE;
-        }
-        m_bOpen = TRUE;
-        return TRUE;
+        return OpenAppend ();
     }
 
     int Write (const void *pBuffer, size_t nCount) override
@@ -52,10 +43,44 @@ public:
         UINT nWritten = 0;
         f_write (&m_File, pBuffer, (UINT) nCount, &nWritten);
         f_sync (&m_File);   // flush now so a later halt/panic still leaves the log on disk
+
+        // Mid-run rollover: a boot-time check alone let a 10 h run grow the log to 6 MB (field
+        // log 2026-09-05). Check the size every kCheckEvery writes and rotate when past the cap.
+        if (++m_nSinceCheck >= kCheckEvery)
+        {
+            m_nSinceCheck = 0;
+            if (f_size (&m_File) >= kMaxBytes)
+            {
+                f_close (&m_File);
+                m_bOpen = FALSE;
+                RotateFiles ();
+                OpenAppend ();   // on failure m_bOpen stays FALSE and logging stops quietly
+            }
+        }
         return (int) nWritten;
     }
 
 private:
+    void RotateFiles (void)
+    {
+        CString OldFull, OldRel;
+        OldFull.Format ("%s.old", (const char *) m_Path);               // full path for f_unlink
+        OldRel.Format ("%s.old", DriveRelative ((const char *) m_Path)); // drive-relative for f_rename
+        f_unlink ((const char *) OldFull);              // drop the previous .old (ignore errors)
+        f_rename ((const char *) m_Path, (const char *) OldRel);   // current -> .old (ignore errors)
+    }
+
+    boolean OpenAppend (void)
+    {
+        // FA_OPEN_APPEND opens-or-creates and seeks to end, so writes extend the file.
+        if (f_open (&m_File, (const char *) m_Path, FA_WRITE | FA_OPEN_APPEND) != FR_OK)
+        {
+            return FALSE;
+        }
+        m_bOpen = TRUE;
+        return TRUE;
+    }
+
     // f_rename requires the new name WITHOUT a drive prefix (the drive comes from the old name).
     // Return the path portion after "<drive>:" e.g. "SD:/lumenlog.txt" -> "/lumenlog.txt".
     static const char *DriveRelative (const char *pPath)
@@ -70,10 +95,13 @@ private:
         return pPath;
     }
 
-    static const unsigned kMaxBytes = 1u * 1024 * 1024;   // ~1 MB cap before rollover
+    static const unsigned kMaxBytes  = 1u * 1024 * 1024;   // ~1 MB cap before rollover
+    static const unsigned kCheckEvery = 256;               // writes between mid-run size checks
 
     FIL      m_File;
     boolean  m_bOpen;
+    CString  m_Path;
+    unsigned m_nSinceCheck = 0;
 };
 
 #endif
