@@ -113,15 +113,29 @@ AV/USB, own IR receiver + NEC remote). **No HDMI-CEC**: the generic TSUMV56 firm
 implement it and the CEC pin is not routed — confirmed by the absence of any CEC/HDMI-Control item
 in its OSD. CEC is therefore off the table for this build (ADR-014).
 
-**Reuse the board's own remote.** It is a 38 kHz NEC remote, so our receiver hears every key it
-sends. The board only acts on the keys it cares about; keys it ignores with no tuner attached
-(number keys, CH+/CH−, coloured keys) become Pause / Next / Previous / Hold via `lumen.conf`. One
-remote for the whole frame; the codes are read off the SD log on first press (S15.5).
+**Remote choice (owner, 2026-09-29):** the board's own remote is bulky; the frame uses the small
+**21-key NEC kit remote** (bundled with the TSOP38238 on Amazon) as its primary remote. The board's
+remote still works as a fallback since both are NEC and codes are config-mapped (S15.5).
+
+### Display power from the kit remote (Phase 5) — and the sleep schedule for free
+The TV board only obeys its *own* remote's codes, so the kit remote's Power key cannot switch the
+display directly. Solution: the Pi **re-transmits the board's power code** through a 940 nm **IR
+LED** on a second GPIO (**GPIO 18**, 38 kHz carrier from a timer, NEC encode = mirror of the
+decoder), aimed at the board's receiver. Kit-remote Power → Pi → board sees "its" Power key.
+- Learn the board remote's power code once from the SD log (same S15.5 path); store as
+  `ir_tx_power = <addr>,<cmd>` in `lumen.conf`.
+- The Pi keeps running while the display is off; Power again turns it back on, slideshow resumes.
+- **Bonus:** with display on/off under firmware control, the long-planned **night sleep schedule**
+  (`sleep = 23:00`, `wake = 07:00`) is a config feature, and the Pi can switch the display on at boot.
+- Plan B if line-of-sight inside the bezel is awkward: drive the POWER line of the T56 board's
+  front-panel key header through an optocoupler (needs the header pinout checked first).
 
 ## Hardware shopping list
-- 1× VS1838B or TSOP38238 IR receiver (3-pin, 38 kHz) — ~₹30
-- 3 female-female jumper wires: OUT→pin 11 (GPIO17), VCC→pin 1 (3.3 V), GND→pin 6
-- Remote: the VS.T56U11.2 board's own remote (no purchase); any NEC remote also works
+- 1× TSOP38238 IR receiver + 21-key NEC remote kit (Amazon, ~₹249) — receiver: OUT→pin 11
+  (GPIO17), GND→pin 6, VS→pin 1 (3.3 V). Kit wires are male-male; use female-female for the Pi.
+- Phase 5 emitter: 1× 940 nm IR LED, 1× 100 Ω resistor, 1× 2N2222 (or any NPN) — ~₹20.
+  GPIO18 (pin 12) → 1 kΩ → base; LED + 100 Ω from 5 V (pin 2) to collector; emitter to GND.
+- Remote: the kit remote (primary); the VS.T56U11.2 board remote (fallback / learn its power code)
 
 ## Definition of done
 1. The kit remote pauses, resumes, steps forward/back, and holds the real slideshow.
