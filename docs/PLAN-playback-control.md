@@ -107,10 +107,21 @@ the settings web page.
 | "Previous" after shuffle/rescan points at a different file | 🟡 | History stores indices *and* names; on mismatch after rescan, clear history |
 | Forgotten pause leaves one photo for days | 🟢 | Auto-resume timeouts |
 
+## The display board and its remote (identified 2026-09-29)
+The panel is driven by a **VS.T56U11.2** universal LCD board (MStar **TSUMV56RUU** scaler; HDMI/VGA/
+AV/USB, own IR receiver + NEC remote). **No HDMI-CEC**: the generic TSUMV56 firmware does not
+implement it and the CEC pin is not routed — confirmed by the absence of any CEC/HDMI-Control item
+in its OSD. CEC is therefore off the table for this build (ADR-014).
+
+**Reuse the board's own remote.** It is a 38 kHz NEC remote, so our receiver hears every key it
+sends. The board only acts on the keys it cares about; keys it ignores with no tuner attached
+(number keys, CH+/CH−, coloured keys) become Pause / Next / Previous / Hold via `lumen.conf`. One
+remote for the whole frame; the codes are read off the SD log on first press (S15.5).
+
 ## Hardware shopping list
 - 1× VS1838B or TSOP38238 IR receiver (3-pin, 38 kHz) — ~₹30
-- 1× NEC 21-key remote (the black "car MP3" kit remote) — ~₹80, or reuse any TV remote
 - 3 female-female jumper wires: OUT→pin 11 (GPIO17), VCC→pin 1 (3.3 V), GND→pin 6
+- Remote: the VS.T56U11.2 board's own remote (no purchase); any NEC remote also works
 
 ## Definition of done
 1. The kit remote pauses, resumes, steps forward/back, and holds the real slideshow.
