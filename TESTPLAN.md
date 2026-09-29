@@ -110,6 +110,19 @@ _Status legend: ⬜ not run · 🟡 partial · ✅ pass · ❌ fail · 🚫 bloc
 | V3-12 | Fully offline end-to-end | 5 | H | Entire flow with **no internet** (phone in airplane mode + Pi hotspot only) succeeds | ⬜ |
 | V3-13 | No v0.2 regression | 5 | T+H | Slideshow / gradient splash / multicore-smooth transitions / USB in-out unchanged | ⬜ |
 
+## Playback control — IR remote (see [docs/PLAN-playback-control.md](docs/PLAN-playback-control.md))
+
+| ID | Verifies | Scenario | Type | Pass criteria | Status |
+|----|----------|----------|------|----------------|--------|
+| PC-01 | **Spike IR-1: raw pulses received** (the gate) | S15 | H | Key press → SD log shows 9000/4500 µs lead + ~562 µs marks on GPIO17 | ⬜ |
+| PC-02 | NEC decoder | S15.5,S15.6 | U | Clean/repeat/jittered frames decode; corrupt + truncated frames emit nothing | ⬜ |
+| PC-03 | Pause / Play | S15.1 | H | Photo freezes, glyph shows 3 s, resumes on Play; auto-resumes after 10 min | ⬜ |
+| PC-04 | Previous | S15.2 | H | Last 32 photos reachable backwards; correct file each time | ⬜ |
+| PC-05 | Next + held key | S15.3 | H | Steps immediately; held key steps every ~250 ms; no stall | ⬜ |
+| PC-06 | Hold | S15.4 | H | Photo stays 30 min then resumes | ⬜ |
+| PC-07 | Learn a TV remote | S15.5 | H | Unknown codes logged; mapped via lumen.conf; works after restart, no rebuild | ⬜ |
+| PC-08 | Noise + load | S15.6 | H | No phantom commands under lamps/sunlight; fps unchanged with AP busy | ⬜ |
+
 ---
 
 ## Test-first order (matches roadmap)

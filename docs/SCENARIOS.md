@@ -318,3 +318,38 @@ photos survive if only the boot slots are re-written (data preserved).
 Every **S#** here becomes a row in [../TESTPLAN.md](../TESTPLAN.md) (unit, on-target smoke, or
 manual HIL). Power-loss (S6), update-safety (S7), and offline (S4) scenarios are the
 highest-priority to exercise, since they're where "product" reliability is won or lost.
+
+---
+
+## 15. Playback control (IR remote)
+
+**S15.1 — Pause on a photo**
+Given the slideshow is running, When the user presses Pause on the remote, Then the current photo
+freezes (no Ken Burns, no fade), a small pause glyph shows for ~3 s, and the photo stays until
+Play is pressed or 10 min elapse (auto-resume).
+↳ Handled by: `PlaybackCommand::Pause`, timeline offset, `pause_timeout_min`.
+
+**S15.2 — Go back to the one that just went by**
+Given a photo was replaced within the last 32 slides, When the user presses Previous, Then that
+photo returns (decoded on core 1, hard-cut or short fade) and the dwell restarts.
+↳ Handled by: 32-entry history ring of (index, name); cleared on rescan.
+
+**S15.3 — Skip forward**
+Given the slideshow is running or paused, When the user presses Next, Then the next photo appears
+within one frame if preloaded, otherwise as soon as its decode finishes. Holding Next steps every
+250 ms.
+↳ Handled by: forcing dwell-elapsed; NEC repeat frames → repeated command.
+
+**S15.4 — Keep this one on the wall**
+Given a photo the user likes, When they press Hold, Then it stays for 30 min, then the show resumes.
+↳ Handled by: Pause with `hold_timeout_min`.
+
+**S15.5 — Unknown remote**
+Given any NEC TV remote, When a key is pressed, Then the SD log shows `ir: addr=.. cmd=.. (unknown key)`
+and the owner maps it in `lumen.conf` without a rebuild.
+↳ Handled by: config-driven key map + logging of unmapped codes.
+
+**S15.6 — Noise and load**
+Given sunlight/LED lamps and the AP + a phone browsing, When the remote is used, Then no phantom
+commands fire and the frame rate is unchanged.
+↳ Handled by: NEC inverse-byte validation, 100 ms gap reset, ISR-only timestamping.

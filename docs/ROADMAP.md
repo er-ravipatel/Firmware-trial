@@ -77,3 +77,7 @@ _Emulator-first (ADR-010): prove in QEMU, then confirm on real hardware._
   new text through a `CConfig`-style string layer (extend the current `ReadConfigFlag`). White-label
   / personalize without recompiling. Web-editable part depends on the settings web UI.
 - SQLite port for the index; fleet update dashboard; multi-frame sync.
+
+## ▶ Next: Playback control — IR remote (raised in v0.3 beta, 2026-09-29)
+Pause / Previous / Next / Hold from a 3-pin IR receiver + any NEC remote (ADR-014). Gated by
+**spike IR-1** (raw pulses on hardware). Plan: [PLAN-playback-control.md](PLAN-playback-control.md).

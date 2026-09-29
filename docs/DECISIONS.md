@@ -181,3 +181,26 @@ why, and what we traded away. Append-only; supersede rather than delete._
   HEIC). *Keep JPEG-only* (rejected — PNG/GIF/BMP are nearly free).
 - **Consequences:** More formats "just work" directly; small code-size increase. The image-agnostic
   promise is: common raster formats on-device, HEIC/WebP/RAW via the phone-side boundary.
+
+## ADR-014 — Playback control via a 3-pin IR receiver + NEC remote
+
+- **Date:** 2026-09-29
+- **Status:** accepted (planned; see [PLAN-playback-control.md](PLAN-playback-control.md))
+- **Context:** Beta feedback: the slideshow cannot be paused, stepped back, or held on a photo.
+  The frame has no input path: the single USB OTG port carries the pendrive, the generic HDMI
+  board passes no CEC, and Circle has no Bluetooth stack.
+- **Decision:** Add a **38 kHz 3-pin IR receiver on GPIO17** and decode the **NEC protocol** in
+  firmware (edge IRQ → timestamp ring → freestanding decoder polled per frame). Any NEC remote
+  works; key codes are config-driven (`lumen.conf`) and unknown codes are logged so a remote can
+  be "learned" without a rebuild. A shared `PlaybackCommand` API on the photo plugin
+  (pause/resume, next, previous, hold, info) is the input-agnostic core.
+- **Alternatives considered:**
+  - *Phone as remote over the existing SoftAP* — zero hardware and everything is already built,
+    but every press means leaving the home Wi-Fi to join the frame's AP. Kept as a later bonus
+    (same command API).
+  - *GPIO push buttons* — lowest risk, but needs holes in the bezel and a hand on the frame.
+  - *USB hub + HID remote/keyboard* — adds a hub to the USB path we just stabilised.
+  - *HDMI-CEC* — not passed through by the display board. *Bluetooth* — no Circle stack.
+- **Consequences:** Appliance-like control for anyone in the room, ~₹110 of parts, three wires.
+  Costs: a first ISR in the project (must stay allocation- and log-free), timing decode under
+  render + net load (de-risked by spike IR-1), and a small overlay/state addition to the plugin.
