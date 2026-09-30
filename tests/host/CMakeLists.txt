@@ -16,8 +16,10 @@ add_executable(host_tests
     test_eventbus.cpp
     test_plugin_scheduler.cpp
     test_exif.cpp
+    test_nec_decoder.cpp
     ${FW_SRC}/util/Sha256.cpp
     ${FW_SRC}/content/ExifReader.cpp
+    ${FW_SRC}/input/NecDecoder.cpp
 )
 
 enable_testing()

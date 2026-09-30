@@ -17,6 +17,7 @@ OBJS = main.o kernel.o Config.o \
        ../src/plugins/PhotoFramePlugin.o \
        ../src/content/JpegDecoder.o \
        ../src/content/ExifReader.o \
+       ../src/input/NecDecoder.o \
        ../src/content/stb_image_impl.o \
        ../src/net/dhcpd.o \
        ../src/net/dnsd.o \
