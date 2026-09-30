@@ -30,6 +30,7 @@
 #include "SdPhotoSource.h"
 #include "DecodeCore.h"
 #include "Config.h"
+#include "IrRemote.h"
 #include "app/PluginScheduler.h"       // via EXTRAINCLUDE=-I../src
 #include "plugins/PhotoFramePlugin.h"
 #include "net/dhcpd.h"
@@ -101,6 +102,7 @@ private:
     CFileLogDevice     m_FileLog;
     CSdPhotoSource     m_PhotoSource;
     CConfig            m_Config;        // SD:/lumen.conf key=value settings (name, wifi, logging, ...)
+    CIrRemote          m_IrRemote;      // IR receiver on GPIO -> NEC -> playback commands (after m_Config)
     u32                m_ElapsedMs;     // animation clock (ms since boot)
 
     lf::PluginScheduler<8> m_Scheduler;

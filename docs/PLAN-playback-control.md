@@ -72,7 +72,7 @@ out; time injected) so it is host-unit-tested against recorded pulse trains. The
 
 ## Phased plan (risk-first)
 
-### Phase 0 — Spike IR-1: receive raw pulses on hardware 🔴 (gates everything)
+### Phase 0 — Spike IR-1: receive raw pulses on hardware 🔴 (gates everything) — firmware READY
 Wire the receiver, register edge IRQs on GPIO17, log the first 40 pulse widths of one key press to
 SD. **Pass:** the log shows a 9000/4500 µs lead followed by 562-ish marks. Verifies the receiver
 polarity, the pin, and that the IRQ fires under the render + net load. **Owner runs; test card
@@ -102,7 +102,35 @@ a 32-entry history ring; hold; auto-resume timeouts; pause glyph + info overlay 
 **Done when:** a debug config `ir_sim = next,pause,prev` (fed by the kernel on a timer) drives the
 slideshow correctly in QEMU screenshots.
 
-### Phase 3 — Integration on hardware
+### Phase 3 — Integration on hardware — code DONE 2026-09-30, hardware test pending
+`firmware/app/IrRemote.h` (CIrRemote): `CGPIOManager` + `CGPIOPin(pin, InputPullUp, &manager)`,
+both-edge IRQ; the ISR only timestamps (`CTimer::GetClockTicks`) and pushes (width, mark) into a
+512-entry lock-free ring (drop on overflow, never block). `Poll()` per frame drains → `NecDecoder`
+→ config key map → `PhotoFramePlugin::command()`. Every decoded key is logged (`ir: addr=.. cmd=..
+-> next`), unmapped ones as `(unknown key)`. Held Next/Prev repeat every 250 ms; Pause/Hold/Info
+ignore repeats. Config: `ir` (on), `ir_gpio` (17), `ir_addr` (any), `ir_key_pause/next/prev/hold/
+info` (hex or decimal), `ir_debug` (raw pulse log, 8 per line, first 72 of a burst). Verified in
+QEMU that init + boot + the sim path are unaffected (no receiver → no edges → inert).
+
+#### Test card PC-01 + PC-03..07 (owner, on hardware)
+Card has the new `kernel8.img` and `ir_debug = on` in `lumen.conf`.
+1. **Wire** (Pi off): receiver dome facing you, legs left→right OUT→pin 11, GND→pin 6, VS→pin 1.
+2. **Boot.** Expect in `lumenlog.txt`: `ir: IR receiver on GPIO17 (edge IRQ) ... [raw pulse debug ON]`.
+   If instead `IR remote: disabled`, the config has `ir = off`.
+3. **Press one key once** on the board's remote (any key; e.g. the red one). Expect within 1 s:
+   `irraw: 9xxxM 4xxxS 5xxM 5xxS 5xxM 16xxS ...` (a ~9000 mark, ~4500 space, then 562-ish marks) and
+   then `ir: addr=0xNN cmd=0xMM (unknown key)`. **That line is PC-01 PASS.** No `irraw` at all →
+   check VS/GND/OUT order and that pin 11 is GPIO17 (or set `ir_gpio`). Pulses but no `ir:` line →
+   send me the `irraw` lines (timing off or non-NEC remote).
+4. **Collect codes:** press ⏯, ⏮, ⏭, red, green once each; note each `cmd=0x..`.
+5. **Map:** add to `lumen.conf`: `ir_key_pause = 0x..`, `ir_key_next = 0x..`, `ir_key_prev = 0x..`,
+   `ir_key_hold = 0x..`, `ir_key_info = 0x..`; set `ir_debug = off`; re-seat, boot.
+6. **PC-03** Pause: photo freezes, ‖ glyph bottom-right for 3 s; Pause again → resumes.
+   **PC-05** Next: next photo at once; hold Next: steps every ~¼ s. **PC-04** Prev ×3: goes back
+   three photos. **PC-06** Hold: stays (auto-resumes after 30 min). Info: filename strip 5 s.
+7. **PC-08** With a phone on the AP browsing the page, press keys: no phantom actions, no stall.
+8. Send `lumenlog.txt`; the `cmd: ... (ir)` and `show:` lines are the evidence.
+
 Kernel: `CIrRemote` (GPIO + ring + Poll), key map from `lumen.conf`, log every decoded key.
 **Done when:** the kit remote pauses/steps the real slideshow (test card PC-03..06), unknown keys
 are logged with their codes, and fps is unchanged while keys are held.

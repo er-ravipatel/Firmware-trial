@@ -78,6 +78,7 @@ CKernel::CKernel (void)
     m_WLAN (FIRMWARE_PATH),
     m_Net (s_APIP, s_APMask, 0, 0, "lumen", NetDeviceTypeWLAN),
     m_bNetUp (FALSE),
+    m_IrRemote (&m_Interrupt, &m_Config),
     m_ElapsedMs (0),
     m_DecodeCore (&m_Photo, CMemorySystem::Get ()),   // core-1 background decoder
     m_PluginCount (0)
@@ -617,6 +618,11 @@ TShutdownMode CKernel::Run (void)
 
     SetupPlugins ();
 
+    // IR remote (config-gated `ir`, default on): GPIO edge IRQ -> NEC -> playback commands.
+    // Inert without a receiver wired (the pull-up keeps the line idle high: no edges, no IRQs).
+    if (!m_IrRemote.Initialize ())
+        m_Logger.Write (FromKernel, LogNotice, "IR remote: disabled");
+
     // Beautiful photo-hero splash (covers SD mount + first-photo decode, fades into the slideshow).
     RunSplashIntro ();
 
@@ -663,6 +669,16 @@ TShutdownMode CKernel::Run (void)
                 m_Logger.Write (FromKernel, LogNotice, "cmd: %s (sim)", lf::PhotoFramePlugin::command_name (cmd));
                 m_Photo.command (cmd);
                 s_nSimNextMs = m_ElapsedMs + 4000;
+            }
+        }
+
+        // ---- IR remote: drain the edge-timestamp ring, decode NEC, map to a playback command. ----
+        {
+            CIrRemote::Command cmd = m_IrRemote.Poll ();
+            if (cmd != CIrRemote::Command::None)
+            {
+                m_Logger.Write (FromKernel, LogNotice, "cmd: %s (ir)", lf::PhotoFramePlugin::command_name (cmd));
+                m_Photo.command (cmd);
             }
         }
 
