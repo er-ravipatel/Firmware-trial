@@ -9,31 +9,43 @@ display: rotating screen plugins (photo, clock, …). Developed **emulator-first
 
 ---
 
-## ▶▶ RESUME HERE (next session) — v0.3 "Universal", in progress
+## ▶▶ RESUME HERE (next session) — v0.3 "Universal" + IR playback control
 
-**Currently building:** v0.3 (offline "any screen / any image"). Full plan: [PLAN-v0.3.md](PLAN-v0.3.md).
-The whole **networking + onboarding + settings half is DONE and hardware-proven**: SoftAP + DHCP +
-DNS + HTTP + captive portal + on-device QR + boot settings window + a **CConfig system**
-(`firmware/app/Config.{h,cpp}`, loads/saves `lumen.conf`) + **config-driven branding** (name,
-tagline, credits, mode, AP SSID) + a **web settings page** (`firmware/src/net/webserver.cpp` — edit
-those fields, Save → `lumen.conf`, **Restart button reboots the Pi** via `g_restartRequested`).
+_Last updated: 2026-09-30._
 
-**Pick up here — the last big v0.3 piece, the conversion flow** (PLAN phases 2b/2c/3): **HEIC
-detection** on a pendrive (classify displayable vs needs-conversion) → **Conversion-mode** (a new
-state, like settings mode but for photos) → the **libheif-WASM conversion page** served by the web
-server (phone decodes+resizes HEIC→JPEG) → **FAT write-back** to the pendrive → reboot-to-resume.
-Route any new text through `m_Config` ([[configurable-branding]]).
+**Where things stand (all committed on `main`, hardware-proven unless noted):**
+- **Networking / onboarding / settings: DONE.** SoftAP + own DHCP + DNS + HTTP + pure captive portal
+  (settings page served to OS probes) + boot-QR settings window + `CConfig` (`lumen.conf`) +
+  config-driven branding + web settings page with Save/Restart.
+- **Offline HEIC conversion: CODE DONE, hardware test pending (V3-03/09/10/12/13).** Inline convert
+  (QR) slide → phone joins AP → `/photos` page (Safari native HEIC decode; libheif-WASM fallback
+  for Android NOT built) → `POST /jpg` write-back → re-scan, no reboot.
+- **Large libraries: DONE (2026-09-04/05, field-proven on an 8,222-photo pendrive, 15 h runs).**
+  Scanner cap 64 → 12,000, sub-folder recursion, tables allocated once (the kernel object is on the
+  128 KB kernel stack). Decode pool 96 → 192 MB (24 MP camera JPEGs now decode); header pre-check
+  rejects > ~24 MP in µs with a logged reason; undecodable slides are skipped; log rolls over
+  mid-run; `load:`/`show:` lines carry name/type/size. 26 files of 32–64 MP remain un-displayable
+  (resize on the PC).
+- **IR remote playback control (ADR-014): phases 1–3 CODE DONE 2026-09-30, awaiting the receiver.**
+  `firmware/src/input/NecDecoder` (12 host tests) → `PhotoFramePlugin::command()` (pause with a
+  frozen virtual clock, next, previous via 32-deep history, hold, info; auto-resume) →
+  `firmware/app/IrRemote.h` (GPIO17 edge IRQ → ring → decode → config key map; unknown keys logged).
+  QEMU-verified via `ir_sim`. **Next action: the owner wires the TSOP38238 and runs the test card in
+  [PLAN-playback-control.md](PLAN-playback-control.md) (Phase 3).** Remote = the VS.T56U11.2 board's own.
 
-**Build/deploy (hardware = SDHOST; see BUILD NOTE below):**
-`wsl bash -lc "cd /mnt/c/.../firmware/app && make -j4"` → `Copy-Item ...\app\kernel8.img D:\`.
-**QEMU note:** the current build is **SDHOST** so QEMU can't read the SD image (no config/photos);
-QEMU still renders (embedded image) — a `qrtest = on` config path and forcing `m_bNetUp=TRUE` were
-used to screenshot QR screens. **Card state:** `D:\lumen.conf` = `logging = on` (wifi defaults on →
-boot QR window). CYW43 firmware blobs live at `D:\firmware\` (needed for WiFi). Restore-to-normal
-isn't needed anymore — the boot-QR settings window *is* the normal behavior now.
+**Still open for v0.3.0-beta:** adaptive resolution (EDID + fallback + `resolution` override, not
+started) · PNG/GIF/BMP in stb (not started; still `STBI_ONLY_JPEG`) · classifier host test ·
+conversion resilience (pull mid-write, disconnect mid-upload) · Android (libheif-WASM) decision ·
+milestone close (version bump from 0.2.0-beta, CHANGELOG, TESTPLAN ticks). Field-log follow-ups:
+shuffle (8k photos in directory order = 25 h loop), NEON cross-fade (fades dip to 9–14 fps).
 
-**Reusable spike/net code:** `firmware/src/net/` (dhcpd, dnsd, webserver) + `firmware/vendor/qrcodegen/`.
-Debug hooks: `portal = on` (full-screen portal via `RunPortalMode`), `qrtest = on` (QR render, QEMU).
+**Build/deploy:** `wsl bash -lc "cd /mnt/c/.../firmware/app && make -j4"` → `Copy-Item ...\app\kernel8.img D:\`.
+Host tests: `./tools/run_host_tests.sh` (419 checks). **QEMU:** the SDHOST build can't read an SD
+image, but a **USB image works** and `lumen.conf` is read from `USB:/` when there is no SD — so debug
+flags (`ir_sim = next,pause,prev`, `qrtest`) run in the emulator. **Card:** `D:\lumen.conf` has
+`logging = on`; add `ir_debug = on` for spike IR-1. CYW43 blobs at `D:\firmware\`.
+
+**Agent hand-off:** [AGENT-BRD.md](AGENT-BRD.md) is the executable brief for rebuilding the product.
 
 ---
 

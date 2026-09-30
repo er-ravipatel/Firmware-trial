@@ -3,6 +3,41 @@
 _All notable changes to this project. Newest first._
 _Format loosely follows [Keep a Changelog](https://keepachangelog.com/)._
 
+## [0.3.0-beta] — in progress — "Universal" (+ IR playback control)
+Third milestone, still fully **offline**: the frame gets its own Wi-Fi hotspot, a phone-based
+settings page, offline iPhone-photo conversion, a 10k-photo library, and (hardware pending) an IR
+remote. Detail: [docs/PLAN-v0.3.md](docs/PLAN-v0.3.md), [docs/PLAN-playback-control.md](docs/PLAN-playback-control.md).
+
+### Added
+- **SoftAP + captive portal + settings page** (hardware-proven): CYW43 access point on every boot,
+  hand-written DHCP server and DNS responder, custom single-buffer HTTP server, OS connectivity
+  probes answered so the page auto-opens on iOS/Android; the boot splash shows a Wi-Fi-join QR with
+  a 10 s countdown; a joined phone enters settings mode. `CConfig` (`SD:/lumen.conf`) with
+  config-driven branding (name/tagline/credits/mode/SSID), Save → file, Restart → reboot.
+- **Offline HEIC conversion** (code complete, hardware test pending): needs-convert files render an
+  inline QR slide; the `/photos` page decodes in the phone browser, resizes to ~1920 px, POSTs a
+  JPEG; the Pi writes it next to the source and re-scans without a reboot.
+- **Large photo libraries:** the scanner indexes up to 12,000 files across sub-folders (was 64, one
+  folder); tables and the file buffer are allocated once. Field-proven on an 8,222-photo pendrive.
+- **Richer photo log:** `load:` lines carry file name, sniffed type, bytes/KB, dimensions and a
+  failure reason; a new `show:` line marks when a slide reaches the screen; scans log count + time.
+- **Playback control via IR remote (ADR-014), phases 1–3:** freestanding NEC decoder (12 host
+  tests); `PhotoFramePlugin::command()` — Pause (frozen virtual clock, glyph, 10 min auto-resume),
+  Next, Previous (32-deep history), Hold (30 min), Info overlay; `CIrRemote` GPIO17 edge-IRQ glue
+  with a config key map and unknown-key logging; `ir_sim` debug driver for QEMU.
+- **docs/AGENT-BRD.md:** agent-ready BRD / master prompt to rebuild the product.
+
+### Fixed
+- **24 MP camera JPEGs failed to decode** (80 of 8,222 in the field log): stb bump pool 96 → 192 MB;
+  a header pre-check rejects anything larger in microseconds with a logged reason; undecodable
+  slides are skipped instead of showing dark for a dwell.
+- **Per-photo file-buffer leak** on Circle's heap (blocks > 512 KB are never reclaimed): fixed 32 MB
+  reused buffer. **Scanner tables** could not grow inline (the kernel object lives on the 128 KB
+  kernel stack), so they are heap-allocated once.
+- **SD log grew unbounded** (6.3 MB against a 1 MB cap): rollover now runs mid-run; the perf line is
+  written every 10 s instead of every second.
+- Web server: receive/send timeouts (blank page under load); buffers kept ≤ 512 KB (heap leak).
+
 ## [0.2.0-beta] — 2026-07-18 — "smooth & polished"
 Second milestone (still fully **offline**): the slideshow is now buttery — the per-photo freeze is
 gone — and the product feels finished on boot. Focus was smoothness, a premium boot experience, and

@@ -228,3 +228,36 @@ it never bites you the same way twice. Promote the durable ones into
   1 MB cap because the rollover check ran only in `Open()`, and the per-second `perf:` line wrote
   36k lines in 10 h. Rule: check `f_size` every N writes and rotate mid-run; log aggregates every
   10 s, not every second.
+
+### IR remote / GPIO (2026-09-30)
+
+- **2026-09-30 — `CGPIOPin` needs its `CGPIOManager` at construction for interrupts.** Context:
+  `ConnectInterrupt()` asserted `m_pManager != 0` and halted the boot; the default constructor +
+  `AssignPin()` never sets the manager. Rule: when the pin number comes from config, create the pin
+  with `new CGPIOPin(pin, mode, &manager)` in `Initialize()` (one-time allocation) rather than as a
+  default-constructed member. Enable both edges with `EnableInterrupt` + `EnableInterrupt2`.
+
+- **2026-09-30 — A dynamically-initialised function-local `static` does not link bare-metal.**
+  Context: `static const char *s = m_Config.GetStr(...)` inside `Run()` produced
+  `undefined reference to __getauxval` from libgcc's `lse-init.o`. The C++ guard-variable runtime
+  (`__cxa_guard_acquire`) uses outline atomics, which pull in an LSE-detection routine that needs
+  libc. Rule: no function-local statics with runtime initialisers in firmware; use members or
+  locals declared before the loop. (`constexpr`/constant-initialised statics are fine.)
+
+- **2026-09-30 — Keep the ISR to a timestamp and a ring push.** Context: NEC pulses are ~562 µs;
+  the render loop runs at ~40 ms per frame, so polling would miss everything, but decoding in the
+  ISR would violate the no-alloc/no-log rule. Rule: ISR = `GetClockTicks()` delta + level read +
+  push into a fixed ring with an atomic-release head; the main loop drains and decodes once per
+  frame. Drop on overflow, never block. A freestanding decoder (pulse widths in) is host-testable
+  with synthetic trains — jitter, noise, truncation — before any hardware exists.
+
+- **2026-09-30 — Freeze the slideshow with a virtual clock, not by touching the state machine.**
+  Context: Pause had to stop Ken Burns, fades and dwell together. Rule: derive every timing from
+  `vtime() = now − paused_time`; pausing freezes the returned value, resuming adds the paused span
+  to the offset. Nothing else changes; hard-cut instead of fade while paused so a dissolve can't
+  freeze half-blended.
+
+- **2026-09-30 — Read `lumen.conf` from the pendrive when there is no SD.** Context: the SDHOST
+  build cannot read an SD image in QEMU, which blocked config-driven debug paths (`ir_sim`). Rule:
+  fall back to `USB:/lumen.conf` at boot when the SD is absent — QEMU with a USB image then
+  exercises any config flag.

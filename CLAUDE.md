@@ -25,8 +25,10 @@ first** — current state, build/run commands, findings, and the pending next-st
 Lumen Frame is a digital photo frame implemented as a **bare-metal firmware OS in C++ on Circle**
 (no Linux) for a **Raspberry Pi Zero 2 W** (BCM2837, `RASPPI=3`, AArch64), driving an Acer Aspire
 4347 LCD (1366×768) over HDMI. Photos load from SD/USB, decode via vendored stb_image, and display
-as a Fit + blurred-background Ken Burns slideshow with cross-fade. Current release: **v0.1.0-beta
-"offline"** (runs on real hardware; WiFi/web-UI is the next milestone). See [docs/STATUS.md](docs/STATUS.md).
+as a Fit + blurred-background Ken Burns slideshow with cross-fade. Shipped: **v0.2.0-beta "smooth &
+polished"**; in progress: **v0.3 "Universal"** (SoftAP + settings page + offline HEIC conversion,
+hardware-proven) and **IR-remote playback control** (ADR-014, awaiting the receiver). See
+[docs/STATUS.md](docs/STATUS.md).
 
 ## Commands
 
@@ -64,6 +66,12 @@ Bash and cannot see `/mnt/c`). Repo path in WSL: `/mnt/c/Workspace/Personal/Firm
   `_FORTIFY_SOURCE` `__*_chk` link errors).
 - **On-hardware debugging = log to SD** (`f_write` + `f_sync` per line) and read the card on a PC.
   Instrument timings (decode/scale ms, fps) before optimizing.
+- **Big tables and buffers: allocate once, never as inline kernel members.** `CKernel` lives on the
+  128 KB kernel stack; a 1.5 MB member array overflows it silently. One-time `malloc`, never freed.
+- **No function-local `static` with a runtime initialiser** in firmware — the C++ guard runtime pulls
+  libgcc outline atomics (`__getauxval`) that don't link bare-metal. Use members or loop-scope locals.
+- **ISRs only timestamp and push to a ring.** No allocation, no logging, no decoding; the main loop
+  drains once per frame. `CGPIOPin` must get its `CGPIOManager` in the constructor for interrupts.
 
 ## Guardrails (things to always/never do)
 
@@ -91,6 +99,8 @@ working in that area, and keep them updated as part of the work:
 - [TESTPLAN.md](TESTPLAN.md) — what to test, how, and pass/fail criteria.
 - [docs/RETROSPECTIVE.md](docs/RETROSPECTIVE.md) — reflections after each milestone.
 - [docs/LEARNINGS.md](docs/LEARNINGS.md) — reusable lessons; promote durable ones into this file.
+- [docs/PLAN-v0.3.md](docs/PLAN-v0.3.md) · [docs/PLAN-playback-control.md](docs/PLAN-playback-control.md) — phased plans for the active work.
+- [docs/AGENT-BRD.md](docs/AGENT-BRD.md) — agent-ready BRD / master prompt to rebuild the product (multi-agent coordination protocol).
 - [CHANGELOG.md](CHANGELOG.md) — notable changes over time.
 
 **The refinement loop:** goals → build → test → outcomes → retrospective → learnings →
