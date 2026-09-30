@@ -64,6 +64,14 @@ void PhotoFramePlugin::reset() {
     state_ = State::Empty;
     cur_.w = cur_.h = 0;
     next_.w = next_.h = 0;
+    // Playback control: a source change (USB in/out, rescan) clears pause + history, since the
+    // indices no longer mean the same files.
+    if (paused_) do_resume();
+    pending_cmd_ = PlaybackCommand::None;
+    force_advance_ = from_history_ = false;
+    retarget_idx_ = -1;
+    hist_head_ = hist_count_ = 0;
+    overlay_until_ = 0;
 }
 
 // Worker-core service: if core 0 posted a decode job, run it (decode + scale + blur into the
@@ -372,7 +380,17 @@ void PhotoFramePlugin::render(ICanvas& canvas) {
     ensure_buffers(W, H);
 
     unsigned n = photo_count();
-    unsigned t = now();
+    apply_command(n);           // remote / web command posted since the last frame, if any
+    unsigned t = vtime();       // frozen while paused
+
+    // A Previous requested while the worker was busy: apply once it is idle.
+    if (retarget_idx_ >= 0 && !bg_in_flight()) {
+        int idx = retarget_idx_;
+        retarget_idx_ = -1;
+        bg_poll_done();          // discard the finished job's "done" flag; we are replacing it
+        preloaded_ = false; bg_posted_ = false;
+        retarget_next(idx);
+    }
 
     if (state_ == State::Empty) {
         index_ = (n > 0) ? 0 : -1;
@@ -387,7 +405,7 @@ void PhotoFramePlugin::render(ICanvas& canvas) {
     } else if (state_ == State::Showing) {
         // Kick off the next slide a third of the way through the dwell. A needs-convert slide has
         // nothing to decode — it's a QR placeholder — so mark it ready immediately.
-        if (n > 1 && !bg_posted_ && !preloaded_ && t - photo_start_ >= kDwellMs / 3) {
+        if (n > 1 && !bg_posted_ && !preloaded_ && (force_advance_ || t - photo_start_ >= kDwellMs / 3)) {
             next_index_ = (index_ + 1) % int(n);
             next_variant_ = variant_of(next_index_);
             next_convert_ = index_needs_convert(next_index_);
@@ -419,10 +437,15 @@ void PhotoFramePlugin::render(ICanvas& canvas) {
         }
         // Advance once the next slide is ready AND the dwell elapsed. Cross-fade between photos;
         // hard-cut when a QR/convert slide is involved (there is no image to blend).
-        if (n > 1 && preloaded_ && t - photo_start_ >= kDwellMs) {
+        if (n > 1 && preloaded_ && (force_advance_ || t - photo_start_ >= kDwellMs)) {
+            if (!from_history_) history_push(index_);   // remember where we came from (Previous)
+            from_history_ = false;
+            force_advance_ = false;
             index_ = next_index_;
             skips_ = 0;
-            if (cur_convert_ || next_convert_) {
+            // Hard-cut (no dissolve) when a QR slide is involved or while paused — a fade would
+            // freeze half-blended on the frozen clock.
+            if (cur_convert_ || next_convert_ || paused_) {
                 DecodedImage tmpi = cur_; cur_ = next_; next_ = tmpi;
                 uint8_t* tmpb = cur_bg_; cur_bg_ = next_bg_; next_bg_ = tmpb;
                 cur_variant_ = next_variant_;
@@ -439,6 +462,7 @@ void PhotoFramePlugin::render(ICanvas& canvas) {
             }
         }
     } else {  // Fading (photos only — convert slides hard-cut)
+        if (force_advance_) { fade_start_ = t - kFadeMs; }   // Next mid-fade: finish it now
         if (t - fade_start_ >= kFadeMs) {
             DecodedImage tmpi = cur_; cur_ = next_; next_ = tmpi;
             uint8_t* tmpb = cur_bg_; cur_bg_ = next_bg_; next_bg_ = tmpb;
@@ -466,6 +490,107 @@ void PhotoFramePlugin::render(ICanvas& canvas) {
         float p = (float) (t - photo_start_) / kSpanMs;
         render_photo(cur_, cur_bg_, p, cur_variant_, fbA_);
         canvas.blit_rgb(0, 0, fw_, fh_, fbA_);
+    }
+    draw_overlays(canvas);
+}
+
+// ---------------------------------------------------------------------------------------------
+// Playback control
+// ---------------------------------------------------------------------------------------------
+
+void PhotoFramePlugin::apply_command(unsigned n) {
+    // Auto-resume a forgotten pause/hold (real-time deadline).
+    if (paused_ && pause_deadline_ms_ && now() - pause_real_start_ >= pause_deadline_ms_) do_resume();
+
+    PlaybackCommand c = pending_cmd_;
+    pending_cmd_ = PlaybackCommand::None;
+    if (c == PlaybackCommand::None) return;
+
+    switch (c) {
+    case PlaybackCommand::PauseToggle:
+        if (paused_) do_resume(); else do_pause(pause_timeout_ms_);
+        break;
+    case PlaybackCommand::Hold:
+        // Hold = pause with the long timeout; pressing it while paused just extends the deadline.
+        if (!paused_) do_pause(hold_timeout_ms_);
+        else { pause_real_start_ = now(); pause_deadline_ms_ = hold_timeout_ms_; }
+        overlay_until_ = now() + 3000; overlay_info_ = false;
+        break;
+    case PlaybackCommand::Next:
+        if (n > 1) force_advance_ = true;   // the Showing branch kicks off/advances at once
+        break;
+    case PlaybackCommand::Previous: {
+        int prev;
+        if (n > 1 && history_pop(prev)) {
+            if (prev < 0 || prev >= int(n)) break;   // stale after a rescan
+            from_history_ = true;
+            if (bg_in_flight()) retarget_idx_ = prev;   // apply when the worker is idle
+            else { preloaded_ = false; bg_posted_ = false; retarget_next(prev); }
+        }
+        break;
+    }
+    case PlaybackCommand::Info:
+        overlay_until_ = now() + 5000; overlay_info_ = true;
+        break;
+    default: break;
+    }
+}
+
+void PhotoFramePlugin::do_pause(unsigned timeout_ms) {
+    if (paused_) return;
+    pause_vt_ = now() - pause_offset_;   // freeze the virtual clock here
+    pause_real_start_ = now();
+    pause_deadline_ms_ = timeout_ms;
+    paused_ = true;
+    overlay_until_ = now() + 3000; overlay_info_ = false;
+}
+
+void PhotoFramePlugin::do_resume() {
+    if (!paused_) return;
+    pause_offset_ += now() - pause_real_start_;   // virtual clock continues where it froze
+    paused_ = false;
+    overlay_until_ = 0;
+}
+
+void PhotoFramePlugin::retarget_next(int idx) {
+    next_index_ = idx;
+    next_variant_ = variant_of(idx);
+    next_convert_ = index_needs_convert(idx);
+    if (next_convert_) preloaded_ = true; else bg_request(idx);
+    bg_posted_ = true;
+    force_advance_ = true;
+}
+
+void PhotoFramePlugin::draw_overlays(ICanvas& canvas) {
+    if (overlay_until_ == 0) return;
+    if (now() >= overlay_until_) { overlay_until_ = 0; return; }
+    const unsigned W = fw_, H = fh_;
+    const Rgb white{235, 240, 246}, shadow{0, 0, 0};
+    if (overlay_info_) {
+        // Filename + position, bottom-left, with a dark backing strip for legibility.
+        const char* name = index_name(index_);
+        char line[kNameMax + 24]; unsigned k = 0;
+        for (const char* p = name; *p && k + 1 < sizeof line; ++p) line[k++] = *p;
+        // "  (i/n)"
+        const char* sep = "  (";
+        for (const char* p = sep; *p && k + 12 < sizeof line; ++p) line[k++] = *p;
+        char num[12]; unsigned nn = 0; unsigned v = unsigned(index_ + 1);
+        do { num[nn++] = char('0' + v % 10); v /= 10; } while (v && nn < sizeof num);
+        while (nn) line[k++] = num[--nn];
+        line[k++] = '/';
+        v = photo_count(); nn = 0;
+        do { num[nn++] = char('0' + v % 10); v /= 10; } while (v && nn < sizeof num);
+        while (nn) line[k++] = num[--nn];
+        line[k++] = ')'; line[k] = '\0';
+        canvas.fill_rect(0, H - 30, k * 8 + 24, 30, shadow);
+        canvas.text(12, H - 22, line, white);
+    } else {
+        // Pause glyph: two bars, bottom-right, on a dark backing square.
+        unsigned s = H / 24; if (s < 16) s = 16;
+        unsigned x0 = W - s * 2, y0 = H - s * 2;
+        canvas.fill_rect(x0 - s / 2, y0 - s / 2, s * 2, s * 2, shadow);
+        canvas.fill_rect(x0, y0, s * 3 / 8, s, white);
+        canvas.fill_rect(x0 + s * 5 / 8, y0, s * 3 / 8, s, white);
     }
 }
 

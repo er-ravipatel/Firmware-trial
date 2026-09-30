@@ -16,9 +16,28 @@ public:
     bool wants_continuous_redraw() const override { return true; }
     void on_activate() override {
         if (state_ == State::Fading) state_ = State::Showing;  // don't resume a mid-fade
-        photo_start_ = now();                                  // fresh dwell on re-entry
+        photo_start_ = vtime();                                // fresh dwell on re-entry
     }
     void render(ICanvas& canvas) override;
+
+    // --- Playback control (IR remote / web page; see docs/PLAN-playback-control.md) ---
+    // Input-agnostic: whoever decodes a key calls command() from the main (render) core; the
+    // command is applied on the next render(). Never called from an ISR.
+    enum class PlaybackCommand { None, PauseToggle, Next, Previous, Hold, Info };
+    void command(PlaybackCommand c) { pending_cmd_ = c; }
+    // Auto-resume timeouts (ms of real time). Pause = 10 min, Hold = 30 min by default.
+    void set_timeouts(unsigned pause_ms, unsigned hold_ms) { pause_timeout_ms_ = pause_ms; hold_timeout_ms_ = hold_ms; }
+    bool paused() const { return paused_; }
+    static const char* command_name(PlaybackCommand c) {
+        switch (c) {
+            case PlaybackCommand::PauseToggle: return "pause";
+            case PlaybackCommand::Next:        return "next";
+            case PlaybackCommand::Previous:    return "prev";
+            case PlaybackCommand::Hold:        return "hold";
+            case PlaybackCommand::Info:        return "info";
+            default:                           return "none";
+        }
+    }
 
     void set_source(IPhotoSource* source) { source_ = source; reset(); }
     void set_clock(const uint32_t* elapsed_ms) { ms_ = elapsed_ms; }
@@ -122,7 +141,25 @@ private:
     }
 
     unsigned now() const { return ms_ ? *ms_ : 0; }
+    // Virtual slideshow clock: real time minus all time spent paused. Every dwell / Ken Burns /
+    // fade computation uses this, so Pause freezes the picture exactly where it is and Resume
+    // continues from there with no jump. While paused it returns the frozen value.
+    unsigned vtime() const { return paused_ ? pause_vt_ : now() - pause_offset_; }
     unsigned photo_count() const { return source_ ? source_->count() : 0; }
+
+    // Playback-control helpers (all on core 0).
+    void apply_command(unsigned n);                 // consume pending_cmd_ at the top of render()
+    void do_pause(unsigned timeout_ms);
+    void do_resume();
+    void retarget_next(int idx);                    // make idx the next slide and advance ASAP
+    void history_push(int idx) { history_[hist_head_ % kHistory] = idx; hist_head_++; if (hist_count_ < kHistory) hist_count_++; }
+    bool history_pop(int& idx) {
+        if (hist_count_ == 0) return false;
+        hist_head_--; hist_count_--;
+        idx = history_[hist_head_ % kHistory];
+        return true;
+    }
+    void draw_overlays(ICanvas& canvas);            // pause glyph / info text, after the blit
     static int variant_of(int idx) { return idx & 3; }
 
     // --- Background-decode handshake (core 0 <-> worker core) ---
@@ -167,8 +204,26 @@ private:
     const volatile bool* net_ready_ = nullptr;  // -> g_dhcpClientConnected (a phone has joined)
     int cur_variant_ = 0, next_variant_ = 0;
     State state_ = State::Empty;
-    unsigned photo_start_ = 0;   // when the current photo first appeared
-    unsigned fade_start_ = 0;    // when the current fade began
+    unsigned photo_start_ = 0;   // when the current photo first appeared (virtual clock)
+    unsigned fade_start_ = 0;    // when the current fade began (virtual clock)
+
+    // --- Playback control state ---
+    PlaybackCommand pending_cmd_ = PlaybackCommand::None;
+    bool     paused_ = false;
+    unsigned pause_vt_ = 0;            // frozen virtual time while paused
+    unsigned pause_real_start_ = 0;    // real time the pause began (for the auto-resume timeout)
+    unsigned pause_offset_ = 0;        // total real ms spent paused so far (vtime = now - this)
+    unsigned pause_deadline_ms_ = 0;   // auto-resume after this many real ms (0 = never)
+    unsigned pause_timeout_ms_ = 10u * 60 * 1000;
+    unsigned hold_timeout_ms_  = 30u * 60 * 1000;
+    bool     force_advance_ = false;   // Next/Previous: advance as soon as the next slide is ready
+    bool     from_history_ = false;    // the pending advance is a Previous (don't push history)
+    int      retarget_idx_ = -1;       // Previous while the worker is busy: apply when it is idle
+    static const unsigned kHistory = 32;
+    int      history_[kHistory] = {0}; // indices of previously shown slides (ring)
+    unsigned hist_head_ = 0, hist_count_ = 0;
+    unsigned overlay_until_ = 0;       // real ms until which the pause glyph / info text shows
+    bool     overlay_info_ = false;    // overlay shows the filename (Info) vs the pause glyph
 
     // Cross-core flags (touched via __atomic_* only). bg_req_: core0->worker; bg_busy_: worker
     // is decoding; bg_done_: worker->core0. bg_index_ is set before bg_req_ is released.

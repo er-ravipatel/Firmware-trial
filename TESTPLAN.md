@@ -115,7 +115,8 @@ _Status legend: ⬜ not run · 🟡 partial · ✅ pass · ❌ fail · 🚫 bloc
 | ID | Verifies | Scenario | Type | Pass criteria | Status |
 |----|----------|----------|------|----------------|--------|
 | PC-01 | **Spike IR-1: raw pulses received** (the gate) | S15 | H | Key press → SD log shows 9000/4500 µs lead + ~562 µs marks on GPIO17 | ⬜ |
-| PC-02 | NEC decoder | S15.5,S15.6 | U | Clean/repeat/jittered frames decode; corrupt + truncated frames emit nothing | ⬜ |
+| PC-02 | NEC decoder | S15.5,S15.6 | U | Clean/repeat/jittered frames decode; corrupt + truncated frames emit nothing | ✅ 2026-09-30 (12 tests) |
+| PC-02e | Playback commands (emulator) | S15.1-4 | T | `ir_sim` in QEMU: next/prev/pause/info/hold drive the slideshow; glyph + info overlay render | ✅ 2026-09-30 |
 | PC-03 | Pause / Play | S15.1 | H | Photo freezes, glyph shows 3 s, resumes on Play; auto-resumes after 10 min | ⬜ |
 | PC-04 | Previous | S15.2 | H | Last 32 photos reachable backwards; correct file each time | ⬜ |
 | PC-05 | Next + held key | S15.3 | H | Steps immediately; held key steps every ~250 ms; no stall | ⬜ |

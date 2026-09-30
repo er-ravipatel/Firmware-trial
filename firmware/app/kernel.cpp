@@ -124,6 +124,9 @@ void CKernel::SetupPlugins (void)
     m_Photo.set_convert_qr ("http://192.168.1.1/photos");
     m_Photo.set_convert_hint (m_Config.GetStr ("ssid", AP_SSID));   // "join this Wi-Fi first"
     m_Photo.set_connected_flag (&g_dhcpClientConnected);            // QR 1 -> QR 2 once a phone joins
+    // Playback control auto-resume (minutes of real time): Pause 10, Hold 30 by default.
+    m_Photo.set_timeouts (m_Config.GetInt ("pause_timeout_min", 10) * 60000u,
+                          m_Config.GetInt ("hold_timeout_min", 30) * 60000u);
 
     m_Plugins[0] = &m_Photo;
     m_Scheduler.add ({"photo", true, 90, -1, -1});   // slideshow is the only screen
@@ -581,6 +584,9 @@ TShutdownMode CKernel::Run (void)
     const char *pSource = "embedded fallback";
 
     boolean bUSB = (f_mount (&m_FileSystemUSB, "USB:", 1) == FR_OK);
+    // No SD (QEMU with the SDHOST build, or a card-less frame): take settings from the pendrive
+    // instead, so debug flags like ir_sim can be exercised in the emulator.
+    if (bUSB && !bSDMounted) m_Config.Load ("USB:/lumen.conf");
     unsigned nUSB = bUSB ? ScanPhotos ("USB:") : 0;
 
     if (nUSB > 0)
@@ -624,11 +630,41 @@ TShutdownMode CKernel::Run (void)
     unsigned nFrames = 0, nFadeFrames = 0;
     unsigned nRenderSum = 0, nRenderMax = 0, nPresentSum = 0, nPresentMax = 0;
 
+    // Playback-control simulator state (debug; see the block inside the loop). Plain locals,
+    // not function statics: a dynamically-initialised local static pulls in the C++ guard
+    // runtime + libgcc outline atomics, which don't link bare-metal (__getauxval).
+    const char *s_pSim = m_Config.GetStr ("ir_sim", "");
+    unsigned s_nSimPos = 0, s_nSimNextMs = 20000;
+
     while (1)
     {
         // Real elapsed time drives smooth Ken Burns + cross-fade animation (frame-rate
         // independent), instead of a fixed tick.
         m_ElapsedMs = CTimer::GetClockTicks () / 1000;
+
+        // ---- Playback-control simulator (debug, QEMU): "ir_sim = next,pause,prev,..." in lumen.conf
+        // fires one command every 4 s from 20 s after boot, so the command path can be verified
+        // with screenshots + the log before the IR receiver exists. Inert unless configured. ----
+        {
+            if (s_pSim[0] && s_pSim[s_nSimPos] && m_ElapsedMs >= s_nSimNextMs)
+            {
+                char tok[12]; unsigned k = 0;
+                while (s_pSim[s_nSimPos] && s_pSim[s_nSimPos] != ',' && k + 1 < sizeof tok)
+                    tok[k++] = s_pSim[s_nSimPos++];
+                tok[k] = '\0';
+                if (s_pSim[s_nSimPos] == ',') s_nSimPos++;
+                using PC = lf::PhotoFramePlugin::PlaybackCommand;
+                PC cmd = PC::None;
+                if      (strcmp (tok, "pause") == 0) cmd = PC::PauseToggle;
+                else if (strcmp (tok, "next")  == 0) cmd = PC::Next;
+                else if (strcmp (tok, "prev")  == 0) cmd = PC::Previous;
+                else if (strcmp (tok, "hold")  == 0) cmd = PC::Hold;
+                else if (strcmp (tok, "info")  == 0) cmd = PC::Info;
+                m_Logger.Write (FromKernel, LogNotice, "cmd: %s (sim)", lf::PhotoFramePlugin::command_name (cmd));
+                m_Photo.command (cmd);
+                s_nSimNextMs = m_ElapsedMs + 4000;
+            }
+        }
 
         // Give the network stack a real time-slice each frame so DHCP + the web page are responsive
         // WITHOUT pausing the slideshow. (A single yield/frame starves the net: the page won't load

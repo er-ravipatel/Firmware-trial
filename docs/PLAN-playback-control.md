@@ -78,12 +78,25 @@ SD. **Pass:** the log shows a 9000/4500 µs lead followed by 562-ish marks. Veri
 polarity, the pin, and that the IRQ fires under the render + net load. **Owner runs; test card
 PC-01.**
 
-### Phase 1 — Freestanding NEC decoder (host-tested)
+### Phase 1 — Freestanding NEC decoder (host-tested) — ✅ DONE 2026-09-30
+`firmware/src/input/NecDecoder.{h,cpp}` + `tests/host/test_nec_decoder.cpp` (12 tests, incl. repeat
+frames, ±20 % jitter, +40 % rejected, corrupted complement, extended address, truncated-then-good,
+2000 random noise pulses). 419 host checks, 0 failures. Linked into `kernel8.img` (not yet called).
 `NecDecoder` + unit tests fed with synthetic and recorded pulse trains: a clean frame, a repeat,
 a ±20 % jittered frame, a corrupted frame (must not emit), a truncated frame followed by a good one.
 **Done when:** tests pass and the decoder emits `(address, command, repeat)`.
 
-### Phase 2 — Playback command API in the plugin
+### Phase 2 — Playback command API in the plugin — ✅ DONE 2026-09-30
+`PhotoFramePlugin::command(PlaybackCommand)` (PauseToggle / Next / Previous / Hold / Info).
+Pause freezes a **virtual clock** (`vtime()` = real − paused time) so Ken Burns and fades stop dead
+and resume with no jump; Next forces the advance (finishes a fade instantly); Previous pops a
+32-entry history ring and retargets the core-1 decode (deferred if the worker is busy); Hold =
+pause with the 30 min deadline; Info = filename + (i/n) overlay 5 s; pause glyph 3 s. Hard-cut
+instead of fade while paused. `set_source()`/rescan clears pause + history. Config:
+`pause_timeout_min` (10), `hold_timeout_min` (30). Debug: `ir_sim = next,pause,prev,...` fires one
+command every 4 s from 20 s after boot (lumen.conf is also read from `USB:/` when there is no SD,
+so this runs in QEMU). Verified in QEMU: log shows each cmd → show, screenshots show the glyph,
+the info strip, and a resumed cross-fade.
 `PhotoFramePlugin::command(PlaybackCommand)`; pause/resume with timeline offset; next; previous with
 a 32-entry history ring; hold; auto-resume timeouts; pause glyph + info overlay via `ICanvas`.
 **Done when:** a debug config `ir_sim = next,pause,prev` (fed by the kernel on a timer) drives the
