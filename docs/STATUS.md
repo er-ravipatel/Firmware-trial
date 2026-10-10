@@ -11,7 +11,7 @@ display: rotating screen plugins (photo, clock, …). Developed **emulator-first
 
 ## ▶▶ RESUME HERE (next session) — v0.3 "Universal" + IR playback control
 
-_Last updated: 2026-09-30._
+_Last updated: 2026-10-10._
 
 **Where things stand (all committed on `main`, hardware-proven unless noted):**
 - **Networking / onboarding / settings: DONE.** SoftAP + own DHCP + DNS + HTTP + pure captive portal
@@ -30,8 +30,12 @@ _Last updated: 2026-09-30._
   `firmware/src/input/NecDecoder` (12 host tests) → `PhotoFramePlugin::command()` (pause with a
   frozen virtual clock, next, previous via 32-deep history, hold, info; auto-resume) →
   `firmware/app/IrRemote.h` (GPIO17 edge IRQ → ring → decode → config key map; unknown keys logged).
-  QEMU-verified via `ir_sim`. **Next action: the owner wires the TSOP38238 and runs the test card in
-  [PLAN-playback-control.md](PLAN-playback-control.md) (Phase 3).** Remote = the VS.T56U11.2 board's own.
+  QEMU-verified via `ir_sim`. **Hardware status 2026-10-10:** a generic unmarked 3-leg 38 kHz
+  receiver is on hand (assume OUT·GND·VCC left→right, dome facing; swap outer wires if no pulses).
+  **Blocker: the Pi Zero 2 W has no GPIO header** — a hammer/soldered header must go on first.
+  **Next action:** header → wire (pin 11 / 6 / 1) → card gets the new image + `ir_debug = on` →
+  spike IR-1 → map keys. Step-by-step in [PLAN-playback-control.md](PLAN-playback-control.md).
+  Remote = the VS.T56U11.2 board's own.
 
 **Still open for v0.3.0-beta:** adaptive resolution (EDID + fallback + `resolution` override, not
 started) · PNG/GIF/BMP in stb (not started; still `STBI_ONLY_JPEG`) · classifier host test ·

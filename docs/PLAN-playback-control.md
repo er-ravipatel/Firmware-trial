@@ -182,16 +182,42 @@ decoder), aimed at the board's receiver. Kit-remote Power → Pi → board sees 
 - Plan B if line-of-sight inside the bezel is awkward: drive the POWER line of the T56 board's
   front-panel key header through an optocoupler (needs the header pinout checked first).
 
-## Hardware shopping list
-- **Now:** 1× TSOP38238 IR receiver (the Amazon kit at ~₹249 is fine; its remote is a spare).
-  Wiring: OUT→pin 11 (GPIO17), GND→pin 6, VS→pin 1 (3.3 V). Kit wires are male-male; use
-  female-female for the Pi header.
+## Hardware on hand (2026-10-10)
+- **Receiver: bought locally, generic unmarked 3-leg 38 kHz part** (black rectangular body, small
+  dome lens on the front) — the TSOP38238 / VS1838B / HX1838 family. Pin order could not be read
+  from the part. Assume the common layout, **dome facing you, legs left→right: OUT · GND · VCC**;
+  the only common clone variant swaps OUT and VCC. GND-in-the-middle is near-universal, so if the
+  spike shows no pulses, **swap the two outer wires and retry** — that swap is harmless, whereas a
+  VCC↔GND swap could kill the part (or stress the Pi's 3.3 V rail). Do not power it any other way.
+- **Pi Zero 2 W has NO header soldered.** Required first: a solderless "hammer" header for the Pi
+  Zero (press-fit, ~₹150–250) or a plain 40-pin male header soldered on (~₹30 + iron). Never push
+  wires into the bare holes. The header also unlocks every future GPIO item (emitter, buttons, PIR).
+- 3× female-to-female jumper wires.
 - **Remote:** the VS.T56U11.2 board's own remote. Nothing to buy.
 - **Deferred (Phase 5 only):** 1× 940 nm IR LED, 1× 100 Ω, 1× NPN (2N2222) — ~₹20.
   GPIO18 (pin 12) → 1 kΩ → base; LED + 100 Ω from 5 V (pin 2) to collector; emitter to GND.
 
+### Step-by-step bring-up (owner)
+1. **Header on the Pi** (hammer header or solder). Result: 40 pins, two rows of 20.
+2. **Find the three pins.** SD slot on the left, header along the top. Pin 1 = top-left corner
+   (square pad underneath), inner row; pin 2 is the outer pin beside it; numbering alternates rows.
+   | Header pin | Position | Use |
+   |---|---|---|
+   | 1 | inner row, 1st from left | 3.3 V |
+   | 6 | outer row, 3rd from left | GND |
+   | 11 | inner row, 6th from left | GPIO 17 (signal) |
+3. **Wire, Pi OFF.** Receiver dome facing you, legs down: left leg → pin 11, middle → pin 6,
+   right → pin 1. Legs must not touch each other.
+4. **Card:** new `kernel8.img` + `ir_debug = on` in `lumen.conf` (agent does this when the card is
+   in the laptop). Re-seat in the Pi.
+5. **Spike:** power on, let the slideshow start, press ONE key once on the board remote, wait 10 s,
+   power off, pull the card. Expect `ir: IR receiver on GPIO17 ...`, then `irraw: 9xxxM 4xxxS 5xxM ...`,
+   then `ir: addr=0x.. cmd=0x.. (unknown key)`. **That is PC-01 PASS.** Nothing → swap outer wires, retry.
+6. **Map:** press ⏯ ⏮ ⏭ red green once each; the agent copies the codes into `lumen.conf`
+   (`ir_key_pause/next/prev/hold/info`), sets `ir_debug = off`; from then on the remote drives the frame.
+
 ## Definition of done
-1. The kit remote pauses, resumes, steps forward/back, and holds the real slideshow.
+1. The board remote pauses, resumes, steps forward/back, and holds the real slideshow.
 2. An unmapped remote's codes appear in the SD log and can be mapped in `lumen.conf` without a rebuild.
 3. Frame rate and the AP are unaffected while keys are pressed or held.
 4. Pause/Hold auto-resume; no state leaks across USB insert/remove or rescan.
